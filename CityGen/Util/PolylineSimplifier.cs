@@ -28,7 +28,7 @@ namespace CityGen.Util
             var dx = segEnd.x - x;
             var dy = segEnd.y - y;
 
-            while (!dx.Equals(0f) || !dy.Equals(0f))
+            if (!dx.Equals(0f) || !dy.Equals(0f))
             {
                 var t = ((pt.x - x) * dx + (pt.y - y) * dy) / (dx * dx + dy * dy);
                 if (t > 1f)

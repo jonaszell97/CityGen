@@ -39,7 +39,7 @@ namespace CityGen.Util
         public NoiseParameters NoiseParams;
 
         /// Park polygons.
-        public Polygon[] Parks;
+        public List<Polygon> Parks;
 
         /// The sea polygon.
         public Polygon Sea;
@@ -51,9 +51,11 @@ namespace CityGen.Util
         public bool Smooth;
 
         /// C'tor.
-        public TensorField(NoiseParameters noiseParams)
+        public TensorField(NoiseParameters noiseParams, bool smooth = false)
         {
             NoiseParams = noiseParams;
+            Smooth = smooth;
+            Parks = new List<Polygon>();
             _basisFields = new List<BasisField>();
             _noise = new SimplexNoise(noiseParams.NoiseSeed);
         }

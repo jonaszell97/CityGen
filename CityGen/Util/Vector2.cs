@@ -33,6 +33,9 @@ namespace CityGen.Util
         /// The angle of this vector to the positive x-axis in radians.
         public float XAxisAngle => MathF.Atan2(y, x);
 
+        /// The angle of this vector to the positive y-axis in radians.
+        public float YAxisAngle => (MathF.PI * .5f) - XAxisAngle;
+
         /// Cross product with another vector.
         public float Cross(Vector2 v)
         {
@@ -107,10 +110,16 @@ namespace CityGen.Util
             return new Vector2(v1.x - v2.x, v1.y - v2.y);
         }
 
-        /// Multiplication.
+        /// Scalar multiplication.
         public static Vector2 operator*(Vector2 v1, float f)
         {
             return new Vector2(v1.x * f, v1.y * f);
+        }
+        
+        /// Multiplication.
+        public static Vector2 operator*(Vector2 v1, Vector2 v2)
+        {
+            return new Vector2(v1.x * v2.x, v1.y * v2.y);
         }
 
         /// Division.
@@ -151,6 +160,11 @@ namespace CityGen.Util
         public static bool operator !=(Vector2 left, Vector2 right)
         {
             return !left.Equals(right);
+        }
+
+        public override string ToString()
+        {
+            return $"Vector2({x:n2}, {y:n2})";
         }
     }
 }

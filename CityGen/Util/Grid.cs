@@ -28,7 +28,8 @@ namespace CityGen.Util
         public Grid(Vector2 worldDimensions, Vector2 origin, float dsep)
         {
             WorldDimensions = worldDimensions;
-            Dimensions = Dimensions / dsep;
+            Dimensions = WorldDimensions / dsep;
+            Dimensions = new Vector2(MathF.Ceiling(Dimensions.x), MathF.Ceiling(Dimensions.y));
             Origin = origin;
 
             _dsep = dsep;
@@ -64,6 +65,15 @@ namespace CityGen.Util
         public void AddPoly(Polygon poly)
         {
             foreach (var pt in poly.Points)
+            {
+                AddSample(pt);
+            }
+        }
+        
+        /// Add all samples from a polyline.
+        public void AddPolyline(List<Vector2> polyline)
+        {
+            foreach (var pt in polyline)
             {
                 AddSample(pt);
             }

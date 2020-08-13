@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 
 namespace CityGen.Util
@@ -44,9 +43,6 @@ namespace CityGen.Util
 
         public static readonly bool SEED_AT_ENDPOINTS = false;
         public static readonly int NEAR_EDGE = 3;
-
-        /// RNG for sampling.
-        protected Random RNG;
 
         /// The field integrator to use.
         protected FieldIntegrator Integrator;
@@ -98,15 +94,12 @@ namespace CityGen.Util
 
         /// Constructor.
         public StreamlineGenerator(FieldIntegrator integrator, Vector2 gridOrigin,
-                                   Vector2 gridWorldDimensions, Parameters streamlineParams,
-                                   int rngSeed)
+                                   Vector2 gridWorldDimensions, Parameters streamlineParams)
         {
             this.Integrator = integrator;
             this.GridOrigin = gridOrigin;
             this.GridWorldDimensions = gridWorldDimensions;
             this.StreamlineParams = streamlineParams;
-            
-            RNG = new Random(rngSeed);
             
             AllStreamlines = new List<List<Vector2>>();
             SimplifiedStreamlines = new List<List<Vector2>>();
@@ -116,7 +109,7 @@ namespace CityGen.Util
             MajorCandidateSeeds = new Stack<Vector2>();
             MinorCandidateSeeds = new Stack<Vector2>();
 
-            Debug.Assert(streamlineParams.DStep > streamlineParams.DSep);
+            Debug.Assert(streamlineParams.DStep < streamlineParams.DSep);
             StreamlineParams.DTest = MathF.Min(StreamlineParams.DTest, StreamlineParams.DSep);
 
             DCollidesSelfSquared = (StreamlineParams.DCircleJoin / 2) * (StreamlineParams.DCircleJoin / 2);
@@ -127,6 +120,13 @@ namespace CityGen.Util
             MinorGrid = new Grid(GridWorldDimensions, GridOrigin, StreamlineParams.DSep);
 
             SetSquaredParams();
+        }
+
+        /// Register existing streamlines to avoid generating new ones too close to them.
+        public void AddExistingStreamlines(StreamlineGenerator gen)
+        {
+            MajorGrid.AddAllSamples(gen.MajorGrid);
+            MinorGrid.AddAllSamples(gen.MinorGrid);
         }
 
         /// Clear the streamlines.
@@ -155,14 +155,14 @@ namespace CityGen.Util
         }
 
         /// Join leftover dangling streamlines.
-        protected void JoinDanglingStreamlines()
+        public void JoinDanglingStreamlines(bool addCulDeSacs = false)
         {
             bool major = true;
             while (true)
             {
                 foreach (var streamline in GetStreamlines(major))
                 {
-                    // Check if this streamline is dangling
+                    // Ignore looping streamlines
                     if (streamline.First().Equals(streamline.Last()))
                     {
                         continue;
@@ -177,11 +177,27 @@ namespace CityGen.Util
                             GetGrid(major).AddSample(pt);
                         }
                     }
+                    else if (addCulDeSacs && IsPointInBounds(streamline[0]))
+                    {
+                        foreach (var pt in CulDeSacPoints(streamline[0], streamline[1], 10f, .3f))
+                        {
+                            streamline.Insert(0, pt);
+                            GetGrid(major).AddSample(pt);
+                        }
+                    }
 
                     var newEnd = GetNextBestJoiningPoint(streamline.Last(), streamline[^4], streamline);
                     if (newEnd != null)
                     {
                         foreach (var pt in PointsBetween(streamline.Last(), newEnd.Value, StreamlineParams.DStep))
+                        {
+                            streamline.Add(pt);
+                            GetGrid(major).AddSample(pt);
+                        }
+                    }
+                    else if (addCulDeSacs && IsPointInBounds(streamline[^1]))
+                    {
+                        foreach (var pt in CulDeSacPoints(streamline[^1], streamline[^4], 10f, .3f))
                         {
                             streamline.Add(pt);
                             GetGrid(major).AddSample(pt);
@@ -291,6 +307,32 @@ namespace CityGen.Util
             return result;
         }
 
+        protected List<Vector2> CulDeSacPoints(Vector2 pt, Vector2 prev, float radius, float stepSizeRad)
+        {
+            var center = pt + (pt - prev).Normalized * radius;
+            
+            // Get angle of first point relative to circle center.
+            var fstAngle = (pt - center).YAxisAngle;
+
+            var points = new List<Vector2>();
+            var maxAngle = (2f * MathF.PI + fstAngle);
+
+            for (var angle = fstAngle + stepSizeRad; angle <= maxAngle; angle += stepSizeRad)
+            {
+                var x = center.x + (radius * MathF.Sin(angle));
+                var y = center.y + (radius * MathF.Cos(angle));
+
+                points.Add(new Vector2(x, y));
+            }
+
+            if (!points.Last().Equals(pt))
+            {
+                points.Add(pt);
+            }
+
+            return points;
+        }
+
         /// Return the appropriate streamline list.
         protected List<List<Vector2>> GetStreamlines(bool major)
         {
@@ -357,8 +399,8 @@ namespace CityGen.Util
 
         /// Sample a point.
         protected Vector2 SamplePoint => new Vector2(
-            (float)RNG.NextDouble() * GridWorldDimensions.x,
-            (float)RNG.NextDouble() * GridWorldDimensions.y) + GridOrigin;
+            RNG.value * GridWorldDimensions.x,
+            RNG.value * GridWorldDimensions.y) + GridOrigin;
 
         /// Simplify a streamline.
         protected List<Vector2> SimplifyStreamline(List<Vector2> streamline)
@@ -366,8 +408,14 @@ namespace CityGen.Util
             return PolylineSimplifier.Simplify(streamline, StreamlineParams.SimplificationTolerance);
         }
 
+        /// Whether or not a point is in bounds of the grid.
+        public bool IsPointInBounds(Vector2 pt)
+        {
+            return pt.x >= 0f && pt.y >= 0f && pt.x < GridWorldDimensions.x & pt.y < GridWorldDimensions.y;
+        }
+
         /// Calculate all streamlines.
-        public IEnumerator CreateAllStreamlines(int iterations = 100)
+        public void CreateAllStreamlines(int iterations = 100)
         {
             var n = 0;
 
@@ -378,8 +426,7 @@ namespace CityGen.Util
 
                 if (++n >= iterations)
                 {
-                    n = 0;
-                    yield return null;
+                     break;
                 }
             }
         }
@@ -444,7 +491,7 @@ namespace CityGen.Util
 
             // Whether or not to test validity using both grid storages
             // (Collide with both major and minor)
-            var collideBoth = RNG.NextDouble() < StreamlineParams.EarlyCollisionProbability;
+            var collideBoth = RNG.value < StreamlineParams.EarlyCollisionProbability;
             var d = Integrator.Integrate(seed, major);
 
             var fwdParams = new IntegrationParameters

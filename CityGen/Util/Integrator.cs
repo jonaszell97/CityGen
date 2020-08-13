@@ -26,7 +26,7 @@ namespace CityGen.Util
         }
 
         /// Whether or not a point is on land.
-        protected bool IsPointOnLand(Vector2 pt)
+        public bool IsPointOnLand(Vector2 pt)
         {
             return TensorField.IsPointOnLand(pt);
         }

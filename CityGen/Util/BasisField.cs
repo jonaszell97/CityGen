@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 
 namespace CityGen.Util
 {
@@ -35,11 +36,6 @@ namespace CityGen.Util
         protected float GetTensorWeight(Vector2 pt, bool smooth)
         {
             var normalizedDistanceToCenter = (pt - Center).Magnitude / Size;
-            if (smooth)
-            {
-                return MathF.Pow(normalizedDistanceToCenter, -Decay);
-            }
-
             if (Decay.Equals(0f) && normalizedDistanceToCenter >= 1f)
             {
                 return 0f;

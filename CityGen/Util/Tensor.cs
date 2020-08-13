@@ -59,7 +59,10 @@ namespace CityGen.Util
             if (smooth)
             {
                 this.R = this.Matrix.Magnitude;
-                this.Matrix /= this.R;
+                if (!this.R.Equals(0f))
+                {
+                    this.Matrix /= this.R;
+                }
             }
             else
             {
@@ -125,7 +128,7 @@ namespace CityGen.Util
                     return new Vector2();
                 }
 
-                var angle = this.Theta * MathF.PI / 2f;
+                var angle = this.Theta + MathF.PI / 2f;
                 return new Vector2(MathF.Cos(angle), MathF.Sin(angle));
             }
         }

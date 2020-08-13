@@ -48,6 +48,37 @@ namespace CityGen.Util
             }
         }
 
+        /// The centroid of the polygon.
+        public Vector2 Centroid
+        {
+            get
+            {
+                var xSum = 0f;
+                var ySum = 0f;
+
+                foreach (var pt in Points)
+                {
+                    xSum += pt.x;
+                    ySum += pt.y;
+                }
+
+                return new Vector2(xSum / Points.Length, ySum / Points.Length);
+            }
+        }
+
+        /// Scale this polygon by a given amount.
+        public void Scale(float scale)
+        {
+            var centroid = Centroid;
+            for (var i = 0; i < Points.Length; ++i)
+            {
+                var vec = Points[i] - centroid;
+                var len = vec.Magnitude;
+
+                Points[i] = centroid + (vec.Normalized * (len - scale));
+            }
+        }
+
         /// Whether or not the given point is in this polygon.
         public bool Contains(Vector2 pt)
         {
