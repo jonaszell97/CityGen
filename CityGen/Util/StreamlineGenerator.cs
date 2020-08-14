@@ -39,10 +39,26 @@ namespace CityGen.Util
 
             /// Simplification tolerance.
             public float SimplificationTolerance;
+
+            /// Probability that a dangling streamline will be converted to a cul-de-sac.
+            public float CulDeSacProbability;
+
+            /// Minimum radius for a cul-de-sac.
+            public float CuLDeSacRadiusMin;
+            
+            /// Maximum radius for a cul-de-sac.
+            public float CuLDeSacRadiusMax;
         }
 
+        /// Whether or not to create seed at endpoints of existing streamlines.
         public static readonly bool SEED_AT_ENDPOINTS = false;
         public static readonly int NEAR_EDGE = 3;
+
+        /// Step size for creating cul-de-sac points in radians.
+        private static readonly float CULDESAC_STEP_SIZE_RAD = .3f;
+
+        /// Minimum distance of a cul-de-sac to a nearby road.
+        private static readonly float MIN_CULDESAC_DISTANCE = 5f;
 
         /// The field integrator to use.
         protected FieldIntegrator Integrator;
@@ -152,10 +168,12 @@ namespace CityGen.Util
             StreamlineParamsSquared.PathIntegrationLimit *= StreamlineParamsSquared.PathIntegrationLimit;
             StreamlineParamsSquared.MaxSeedTries *= StreamlineParamsSquared.MaxSeedTries;
             StreamlineParamsSquared.EarlyCollisionProbability *= StreamlineParamsSquared.EarlyCollisionProbability;
+            StreamlineParamsSquared.CuLDeSacRadiusMin *= StreamlineParamsSquared.CuLDeSacRadiusMin;
+            StreamlineParamsSquared.CuLDeSacRadiusMax *= StreamlineParamsSquared.CuLDeSacRadiusMax;
         }
 
         /// Join leftover dangling streamlines.
-        public void JoinDanglingStreamlines(bool addCulDeSacs = false)
+        public void JoinDanglingStreamlines()
         {
             bool major = true;
             while (true)
@@ -168,36 +186,68 @@ namespace CityGen.Util
                         continue;
                     }
 
+                    // Find a new start for the streamline, or generate a cul-de-sac.
                     var newStart = GetNextBestJoiningPoint(streamline[0], streamline[4], streamline);
-                    if (newStart != null)
+                    var maxCulDeSacRadiusStart = newStart.HasValue
+                        ? (newStart.Value - streamline[0]).Magnitude * .5f - MIN_CULDESAC_DISTANCE
+                        : StreamlineParams.CuLDeSacRadiusMax;
+
+                    var culDeSacPossible = maxCulDeSacRadiusStart >= StreamlineParams.CuLDeSacRadiusMin;
+
+                    var addCulDeSacStart = culDeSacPossible && RNG.value < StreamlineParams.CulDeSacProbability;
+                    if (!addCulDeSacStart)
                     {
-                        foreach (var pt in PointsBetween(streamline[0], newStart.Value, StreamlineParams.DStep))
+                        if (newStart != null)
                         {
-                            streamline.Insert(0, pt);
-                            GetGrid(major).AddSample(pt);
+                            foreach (var pt in PointsBetween(streamline[0], newStart.Value, StreamlineParams.DStep))
+                            {
+                                streamline.Insert(0, pt);
+                                GetGrid(major).AddSample(pt);
+                            }
+                        }
+                        else
+                        {
+                            addCulDeSacStart = true;
                         }
                     }
-                    else if (addCulDeSacs && IsPointInBounds(streamline[0]))
+
+                    if (addCulDeSacStart && IsPointInBounds(streamline[0]))
                     {
-                        foreach (var pt in CulDeSacPoints(streamline[0], streamline[1], 10f, .3f))
+                        foreach (var pt in CulDeSacPoints(streamline[0], streamline[1], maxCulDeSacRadiusStart))
                         {
                             streamline.Insert(0, pt);
                             GetGrid(major).AddSample(pt);
                         }
                     }
 
-                    var newEnd = GetNextBestJoiningPoint(streamline.Last(), streamline[^4], streamline);
-                    if (newEnd != null)
+                    // Find a new end for the streamline, or generate a cul-de-sac.
+                    var newEnd = GetNextBestJoiningPoint(streamline[^1], streamline[^4], streamline);
+                    var maxCulDeSacRadiusEnd = newEnd.HasValue
+                        ? (newEnd.Value - streamline[^1]).Magnitude * .5f - MIN_CULDESAC_DISTANCE
+                        : StreamlineParams.CuLDeSacRadiusMax;
+
+                    culDeSacPossible = maxCulDeSacRadiusEnd >= StreamlineParams.CuLDeSacRadiusMin;
+
+                    var addCulDeSacEnd = culDeSacPossible && RNG.value < StreamlineParams.CulDeSacProbability;
+                    if (!addCulDeSacEnd)
                     {
-                        foreach (var pt in PointsBetween(streamline.Last(), newEnd.Value, StreamlineParams.DStep))
+                        if (newEnd != null)
                         {
-                            streamline.Add(pt);
-                            GetGrid(major).AddSample(pt);
+                            foreach (var pt in PointsBetween(streamline[^1], newEnd.Value, StreamlineParams.DStep))
+                            {
+                                streamline.Add(pt);
+                                GetGrid(major).AddSample(pt);
+                            }
+                        }
+                        else
+                        {
+                            addCulDeSacEnd = true;
                         }
                     }
-                    else if (addCulDeSacs && IsPointInBounds(streamline[^1]))
+
+                    if (addCulDeSacEnd && IsPointInBounds(streamline[^1]))
                     {
-                        foreach (var pt in CulDeSacPoints(streamline[^1], streamline[^4], 10f, .3f))
+                        foreach (var pt in CulDeSacPoints(streamline[^1], streamline[^4], maxCulDeSacRadiusEnd))
                         {
                             streamline.Add(pt);
                             GetGrid(major).AddSample(pt);
@@ -216,10 +266,22 @@ namespace CityGen.Util
             }
 
             // Reset simplified streamlines.
-            SimplifiedStreamlines.Clear();
-            foreach (var streamline in AllStreamlines)
+            if (SimplifiedStreamlines.Count == AllStreamlines.Count)
             {
-                SimplifiedStreamlines.Add(SimplifyStreamline(streamline));
+                for (var i = 0; i < AllStreamlines.Count; ++i)
+                {
+                    var simplified = SimplifiedStreamlines[i];
+                    simplified.Clear();
+                    simplified.AddRange(SimplifyStreamline(AllStreamlines[i]));
+                }
+            }
+            else
+            {
+                SimplifiedStreamlines.Clear();
+                foreach (var streamline in AllStreamlines)
+                {
+                    SimplifiedStreamlines.Add(SimplifyStreamline(streamline));
+                }
             }
         }
 
@@ -307,17 +369,20 @@ namespace CityGen.Util
             return result;
         }
 
-        protected List<Vector2> CulDeSacPoints(Vector2 pt, Vector2 prev, float radius, float stepSizeRad)
+        protected List<Vector2> CulDeSacPoints(Vector2 pt, Vector2 prev, float maxRadius)
         {
+            var radius = RNG.Next(StreamlineParams.CuLDeSacRadiusMin, 
+                MathF.Min(maxRadius, StreamlineParams.CuLDeSacRadiusMax));
+
             var center = pt + (pt - prev).Normalized * radius;
-            
+
             // Get angle of first point relative to circle center.
             var fstAngle = (pt - center).YAxisAngle;
 
             var points = new List<Vector2>();
             var maxAngle = (2f * MathF.PI + fstAngle);
 
-            for (var angle = fstAngle + stepSizeRad; angle <= maxAngle; angle += stepSizeRad)
+            for (var angle = fstAngle + CULDESAC_STEP_SIZE_RAD; angle <= maxAngle; angle += CULDESAC_STEP_SIZE_RAD)
             {
                 var x = center.x + (radius * MathF.Sin(angle));
                 var y = center.y + (radius * MathF.Cos(angle));
@@ -352,7 +417,7 @@ namespace CityGen.Util
         }
 
         /// Return the appropriate seed.
-        protected Vector2? GetSeed(bool major)
+        protected Vector2? GetSeed(bool major, Polygon boundingPoly = null)
         {
             Vector2 seed;
             var candidateSeeds = GetCandidateSeeds(major);
@@ -368,9 +433,16 @@ namespace CityGen.Util
                 }
             }
 
-            seed = SamplePoint;
+            if (boundingPoly != null)
+            {
+                seed = boundingPoly.RandomPoint;
+            }
+            else
+            {
+                seed = SamplePoint;   
+            }
+            
             var i = 0;
-
             while (!IsValidSample(major, seed, StreamlineParamsSquared.DSep))
             {
                 if (i >= StreamlineParams.MaxSeedTries)
@@ -415,18 +487,31 @@ namespace CityGen.Util
         }
 
         /// Calculate all streamlines.
-        public void CreateAllStreamlines(int iterations = 100)
+        public void CreateAllStreamlines(int max = 100)
         {
             var n = 0;
-
             var major = true;
             while (CreateStreamline(major))
             {
                 major = !major;
-
-                if (++n >= iterations)
+                if (n++ > max)
                 {
-                     break;
+                    return;
+                }
+            }
+        }
+
+        /// Create streamlines for a park.
+        public void CreateParkStreamlines(Polygon park, int max = 10)
+        {
+            var n = 0;
+            var major = true;
+            while (CreateParkStreamline(park, major))
+            {
+                major = !major;
+                if (n++ > max)
+                {
+                    return;
                 }
             }
         }
@@ -441,6 +526,37 @@ namespace CityGen.Util
             }
 
             var streamline = IntegrateStreamline(seed.Value, major);
+            if (streamline.Count <= 5)
+            {
+                return true;
+            }
+            
+            GetGrid(major).AddPolyline(streamline);
+            GetStreamlines(major).Add(streamline);
+            AllStreamlines.Add(streamline);
+            SimplifiedStreamlines.Add(SimplifyStreamline(streamline));
+            
+            // Add candidate seeds
+            if (!streamline.First().Equals(streamline.Last()))
+            {
+                var seeds = GetCandidateSeeds(!major);
+                seeds.Push(streamline.First());
+                seeds.Push(streamline.Last());
+            }
+            
+            return true;
+        }
+        
+        /// Create a single park streamline.
+        protected bool CreateParkStreamline(Polygon park, bool major)
+        {
+            var seed = GetSeed(major, park);
+            if (seed == null)
+            {
+                return false;
+            }
+
+            var streamline = IntegrateStreamline(seed.Value, major, park);
             if (streamline.Count <= 5)
             {
                 return true;
@@ -481,10 +597,14 @@ namespace CityGen.Util
 
             /// Whether or not the streamline is valid.
             internal bool Valid;
+
+            /// The polygon to which the streamline should be confined, or null if the streamline is
+            /// unbounded.
+            internal Polygon BoundingPoly;
         }
 
         /// Integrate a streamline.
-        protected List<Vector2> IntegrateStreamline(Vector2 seed, bool major)
+        protected List<Vector2> IntegrateStreamline(Vector2 seed, bool major, Polygon boundingPoly = null)
         {
             var count = 0;
             var pointsEscaped = false; // True once two integration fronts have moved dlookahead away
@@ -502,6 +622,7 @@ namespace CityGen.Util
                 PreviousDirection = d,
                 PreviousPoint = seed + d,
                 Valid = PointInBounds(seed + d),
+                BoundingPoly = boundingPoly,
             };
 
             var dNeg = d * -1f;
@@ -513,6 +634,7 @@ namespace CityGen.Util
                 PreviousDirection = dNeg,
                 PreviousPoint = seed + dNeg,
                 Valid = PointInBounds(seed + dNeg),
+                BoundingPoly = boundingPoly,
             };
 
             while (count < StreamlineParams.PathIntegrationLimit && (fwdParams.Valid || bwdParams.Valid))
@@ -567,18 +689,40 @@ namespace CityGen.Util
             }
 
             var nextPoint = parameters.PreviousPoint + nextDirection;
-            if (PointInBounds(nextPoint)
-                && IsValidSample(major, nextPoint, StreamlineParamsSquared.DTest, collideBoth)
-                && !StreamlineTurned(parameters.Seed, parameters.OriginalDir, nextPoint, nextDirection))
+            
+            // Stop if the next point is out of bounds.
+            bool inBounds;
+            if (parameters.BoundingPoly != null)
             {
-                parameters.PreviousPoint = nextPoint;
-                parameters.PreviousDirection = nextDirection;
+                inBounds = parameters.BoundingPoly.Contains(nextPoint);
             }
             else
             {
-                parameters.Streamline.Add(nextPoint);
-                parameters.Valid = false;
+                inBounds = PointInBounds(nextPoint);
             }
+
+            if (!inBounds)
+            {
+                parameters.Valid = false;
+                return;
+            }
+            
+            // Stop if the next point is not a valid sample.
+            if (!IsValidSample(major, nextPoint, StreamlineParamsSquared.DTest, collideBoth))
+            {
+                parameters.Valid = false;
+                return;
+            }
+
+            // Stop if the streamline turned.
+            if (StreamlineTurned(parameters.Seed, parameters.OriginalDir, nextPoint, nextDirection))
+            {
+                parameters.Valid = false;
+                return;
+            }
+
+            parameters.PreviousPoint = nextPoint;
+            parameters.PreviousDirection = nextDirection;
         }
 
         protected bool PointInBounds(Vector2 pt)

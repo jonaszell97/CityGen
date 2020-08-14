@@ -148,9 +148,11 @@ namespace CityGen.Util
         }
 
         /// Get the rotational noise angle in radians.
-        private float GetRotationalNoise(Vector2 pt, float size, float angle)
+        private float GetRotationalNoise(Vector2 pt, float size, float angleDeg)
         {
-            return _noise.SamplePixel2D((int)(pt.x / size), (int)(pt.y / size)) * angle * MathF.PI / 180f;
+            var angleRad = angleDeg * (MathF.PI / 180f);
+            var noise = _noise.SamplePixel2D((int) (pt.x / size), (int) (pt.y / size));
+            return noise * angleRad;
         }
 
         /// Whether or not a point is on land.

@@ -31,43 +31,23 @@ namespace CityGen.Util
                             park.Points.Select(p => GetGlobalCoordinate(map, p, resolution)).ToArray());
                     }
 
-                    var mainBgPen = new Pen(Color.Gray, .003f * resolution + .001f * resolution) { LineJoin = LineJoin.Round };
-                    var mainBrush = new Pen(Color.Yellow, .003f * resolution) { LineJoin = LineJoin.Round };
-                    
-                    var majorBgPen = new Pen(Color.Gray, .002f * resolution + .001f * resolution) { LineJoin = LineJoin.Round };
-                    var majorBrush = new Pen(Color.White, .002f * resolution) { LineJoin = LineJoin.Round };
-
-                    var minorBgPen = new Pen(Color.Gray, .001f * resolution + .0005f * resolution) { LineJoin = LineJoin.Round };
-                    var minorBrush = new Pen(Color.White, .001f * resolution) { LineJoin = LineJoin.Round };
-
-                    foreach (var road in map.MainRoads)
+                    var pens = new Dictionary<string, Tuple<Pen, Pen>>();
+                    foreach (var road in map.Roads)
                     {
-                        DrawRoad(map, resolution, graphics, road, mainBgPen);
+                        if (!pens.ContainsKey(road.Type))
+                        {
+                            pens.Add(road.Type, Tuple.Create(
+                                new Pen(road.BorderDrawColor, road.DrawWidth * resolution + road.BorderDrawWidth * resolution),
+                                new Pen(road.DrawColor, road.DrawWidth * resolution)));
+                        }
+                        
+                        DrawRoad(map, resolution, graphics, road.Streamline, pens[road.Type].Item1);
                     }
 
-                    foreach (var road in map.MajorRoads)
+                    for (var i = map.Roads.Count - 1; i >= 0; --i)
                     {
-                        DrawRoad(map, resolution, graphics, road, majorBgPen);
-                    }
-                    
-                    foreach (var road in map.MinorRoads)
-                    {
-                        DrawRoad(map, resolution, graphics, road, minorBgPen);
-                    }
-                    
-                    foreach (var road in map.MinorRoads)
-                    {
-                        DrawRoad(map, resolution, graphics, road, minorBrush);
-                    }
-                    
-                    foreach (var road in map.MajorRoads)
-                    {
-                        DrawRoad(map, resolution, graphics, road, majorBrush);
-                    }
-
-                    foreach (var road in map.MainRoads)
-                    {
-                        DrawRoad(map, resolution, graphics, road, mainBrush);
+                        var road = map.Roads[i];
+                        DrawRoad(map, resolution, graphics, road.Streamline, pens[road.Type].Item2);
                     }
 
                     if (graph != null)

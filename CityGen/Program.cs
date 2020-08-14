@@ -18,35 +18,23 @@ namespace CityGen
         /// The main road parameters.
         public StreamlineGenerator.Parameters MainRoadParams;
 
-        /// The generated main roads.
-        public List<List<Vector2>> MainRoads;
-        
         /// The major road parameters.
         public StreamlineGenerator.Parameters MajorRoadParams;
 
-        /// The generated major roads.
-        public List<List<Vector2>> MajorRoads;
-
         /// The minor road parameters.
         public StreamlineGenerator.Parameters MinorRoadParams;
+        
+        /// The park path parameters.
+        public StreamlineGenerator.Parameters PathParams;
 
-        /// The generated minor roads.
-        public List<List<Vector2>> MinorRoads;
+        /// The generated roads.
+        public List<Road> Roads;
+
+        /// The streamline generators.
+        public List<Tuple<StreamlineGenerator, bool>> Generators;
 
         /// The graph of this map.
-        private Graph _graph;
-        public Graph Graph
-        {
-            get
-            {
-                if (_graph == null)
-                {
-                    GenerateGraph();
-                }
-
-                return _graph;
-            }
-        }
+        public Graph Graph;
 
         /// Constructor.
         public Map(Vector2 worldDimensions, Vector2 worldOrigin, bool smooth) : base(new TensorField.NoiseParameters
@@ -60,6 +48,9 @@ namespace CityGen
         {
             WorldDimensions = worldDimensions;
             WorldOrigin = worldOrigin;
+            Generators = new List<Tuple<StreamlineGenerator, bool>>();
+            Roads = new List<Road>();
+            Graph = new Graph();
             
             MainRoadParams = new StreamlineGenerator.Parameters
             {
@@ -73,6 +64,10 @@ namespace CityGen
                 RoadJoinAngle = 0.1f,
                 SimplificationTolerance = 0.5f,
                 EarlyCollisionProbability = 0f,
+
+                CulDeSacProbability = .01f,
+                CuLDeSacRadiusMin = 15f,
+                CuLDeSacRadiusMax = 25f,
             };
 
             MajorRoadParams = new StreamlineGenerator.Parameters
@@ -87,8 +82,12 @@ namespace CityGen
                 RoadJoinAngle = 0.1f,
                 SimplificationTolerance = 0.5f,
                 EarlyCollisionProbability = 0f,
+
+                CulDeSacProbability = .03f,
+                CuLDeSacRadiusMin = 7.5f,
+                CuLDeSacRadiusMax = 15f,
             };
-            
+
             MinorRoadParams = new StreamlineGenerator.Parameters
             {
                 DSep = 20f,
@@ -101,6 +100,25 @@ namespace CityGen
                 RoadJoinAngle = 0.1f,
                 SimplificationTolerance = 0.5f,
                 EarlyCollisionProbability = 0f,
+
+                CulDeSacProbability = .05f,
+                CuLDeSacRadiusMin = 5f,
+                CuLDeSacRadiusMax = 10f,
+            };
+
+            PathParams = new StreamlineGenerator.Parameters
+            {
+                DSep = 20f,
+                DTest = 15f,
+                PathIntegrationLimit = 2688,
+                MaxSeedTries = 300,
+                DStep = 1f,
+                DLookahead = 40f,
+                DCircleJoin = 5f,
+                RoadJoinAngle = 0.1f,
+                SimplificationTolerance = 0.5f,
+                EarlyCollisionProbability = 0f,
+                CulDeSacProbability = 0f,
             };
         }
 
@@ -120,36 +138,59 @@ namespace CityGen
                 AddRandomRadial();
             }
         }
-
-        /// Generate the roads.
-        public void GenerateAllRoads()
+        
+        /// Generate main roads.
+        public void GenerateMainRoads()
         {
-            var mainGen = GenerateRoads(MainRoadParams, out MainRoads);
-            var majorGen = GenerateRoads(MajorRoadParams, out MajorRoads, mainGen);
-            
-            MinorRoads = new List<List<Vector2>>();
-            // var minorGen = GenerateRoads(MinorRoadParams, out MinorRoads, mainGen, majorGen);
-
-            mainGen.JoinDanglingStreamlines(true);
-            majorGen.JoinDanglingStreamlines(true);
-            // minorGen.JoinDanglingStreamlines();
+            GenerateRoads("Main", MainRoadParams);
+        }
+        
+        /// Generate major roads.
+        public void GenerateMajorRoads()
+        {
+            GenerateRoads("Major", MajorRoadParams);
+        }
+        
+        /// Generate minor roads.
+        public void GenerateMinorRoads()
+        {
+            GenerateRoads("Minor", MinorRoadParams);
         }
 
-        private StreamlineGenerator GenerateRoads(StreamlineGenerator.Parameters parameters,
-                                                  out List<List<Vector2>> roadList,
-                                                  params StreamlineGenerator[] previousGenerators)
+        private StreamlineGenerator GenerateRoads(string type, StreamlineGenerator.Parameters parameters,
+                                                  Polygon park = null)
         {
             var integrator = new RungeKutta4Integrator(this, parameters);
             var generator = new StreamlineGenerator(integrator, WorldOrigin, WorldDimensions, parameters);
 
-            foreach (var gen in previousGenerators)
+            foreach (var gen in Generators)
             {
-                generator.AddExistingStreamlines(gen);
+                if (!gen.Item2)
+                {
+                    continue;
+                }
+                
+                generator.AddExistingStreamlines(gen.Item1);
             }
 
-            generator.CreateAllStreamlines();
-            roadList = generator.SimplifiedStreamlines;
+            if (park == null)
+            {
+                generator.CreateAllStreamlines();
+            }
+            else
+            {
+                generator.CreateParkStreamlines(park);
+            }
 
+            Generators.Add(Tuple.Create(generator, park == null));
+
+            if (park == null)
+            {
+                Graph.AddStreamlines(generator.SimplifiedStreamlines);
+                Graph.ModifyStreamlines(generator.SimplifiedStreamlines);
+            }
+
+            Roads.AddRange(generator.SimplifiedStreamlines.Select(streamline => new Road(type, streamline)));
             return generator;
         }
 
@@ -186,29 +227,18 @@ namespace CityGen
             }
         }
 
-        /// Generate the graph for this map.
-        public void GenerateGraph()
-        {
-            _graph = new Graph();
-            _graph.AddStreamlines(MainRoads);
-            _graph.ModifyStreamlines(MainRoads);
-
-            _graph.AddStreamlines(MajorRoads);
-            _graph.ModifyStreamlines(MajorRoads);
-
-            _graph.FindClosedLoops();
-        }
-
         /// Add random parks to this map.
         public void AddParks(float areaPercentage, float minDistanceBetweenParks = 0f)
         {
+            Graph.FindClosedLoops();
+
             var maxArea = areaPercentage * WorldDimensions.x * WorldDimensions.y;
             var polyList = Graph.Loops.ToList();
             var parkArea = 0f;
             var usedPolys = new HashSet<int>();
             var parkCentroids = new List<Vector2>();
             var tries = 0;
-
+            
             while (parkArea < maxArea && Parks.Count < polyList.Count && tries < polyList.Count * 2)
             {
                 var nextPark = RNG.Next(0, polyList.Count);
@@ -219,8 +249,13 @@ namespace CityGen
                 }
 
                 var poly = polyList[nextPark].Poly;
-                var centroid = poly.Centroid;
+                if (!poly.Valid)
+                {
+                    ++tries;
+                    continue;
+                }
 
+                var centroid = poly.Centroid;
                 if (minDistanceBetweenParks > 0f)
                 {
                     var valid = true;
@@ -230,7 +265,7 @@ namespace CityGen
                         if (dist <= minDistanceBetweenParks)
                         {
                             valid = false;
-                            continue;
+                            break;
                         }
                     }
 
@@ -246,7 +281,17 @@ namespace CityGen
                 Parks.Add(poly);
                 parkCentroids.Add(centroid);
 
+                GenerateRoads("Path", PathParams, poly);
                 parkArea += poly.Area;
+            }
+        }
+
+        /// Finalize the map.
+        public void FinalizeMap()
+        {
+            foreach (var gen in Generators)
+            {
+                gen.Item1.JoinDanglingStreamlines();
             }
         }
     }
@@ -255,14 +300,16 @@ namespace CityGen
     {
         static void Main(string[] args)
         {
-            RNG.Reseed(121);
+            RNG.Reseed(112121);
 
             var map = new Map(new Vector2(2000f, 2000f), new Vector2(0f, 0f), true);
             map.InitializeRandom();
-            map.GenerateAllRoads();
+            map.GenerateMainRoads();
+            map.GenerateMajorRoads();
 
-            map.GenerateGraph();
-            map.AddParks(0.05f, 200f);
+            map.AddParks(0.05f, 500f);
+            map.FinalizeMap();
+            // map.GenerateMinorRoads();
 
             PNGExporter.ExportPNG(map, "/Users/Jonas/Downloads/TEST_MAP.png", 2048);
             PNGExporter.ExportGraph(map, "/Users/Jonas/Downloads/TEST_GRAPH.png", 2048);

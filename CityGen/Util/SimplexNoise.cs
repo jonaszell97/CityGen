@@ -32,17 +32,17 @@ namespace CityGen.Util
             {
                 for (var j = 0; j < height; j++)
                 {
-                    values[i, j] = Generate(i * scale, j * scale) * 128 + 128;
+                    values[i, j] = (Generate(i * scale, j * scale) + 1f) * .5f;
                 }
             }
 
             return values;
         }
 
-        /// Sample a single point of 2D noise.
+        /// Sample a single point of 2D noise in the interval [0, 1].
         public float SamplePixel2D(int x, int y, float scale = 1f)
         {
-            return Generate(x * scale, y * scale) * 128 + 128;
+            return (Generate(x * scale, y * scale) + 1f) * .5f;
         }
 
         /// Generate a point of noise.

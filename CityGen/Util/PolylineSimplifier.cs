@@ -19,6 +19,23 @@ namespace CityGen.Util
 
             return result;
         }
+        
+        /// Simplify a polyline with a given tolerance.
+        public static void SimplifyInPlace(List<Vector2> points, float tolerance)
+        {
+            if (points.Count <= 2)
+            {
+                return;
+            }
+
+            var pointsCopy = new List<Vector2>(points);
+            var sqTolerance = tolerance * tolerance;
+            var result = SimplifyRadialDist(pointsCopy, sqTolerance);
+            result = SimplifyDouglasPeucker(result, sqTolerance);
+
+            points.Clear();
+            points.AddRange(result);
+        }
 
         /// Square distance from a point to a segment.
         private static float SquareDistanceToSeg(Vector2 pt, Vector2 segStart, Vector2 segEnd)

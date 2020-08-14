@@ -104,6 +104,9 @@ namespace CityGen.Util
         /// Closed loops in the graph.
         public HashSet<ClosedLoop> Loops;
 
+        /// Whether or not the loops are up to date.
+        private bool _loopsReady;
+
         private Dictionary<Vector2, List<List<Vector2>>> foundIntersections;
         private Dictionary<int, List<Vector2>> intersectionsPerStreamline;
 
@@ -114,6 +117,7 @@ namespace CityGen.Util
             Loops = new HashSet<ClosedLoop>();
             foundIntersections = new Dictionary<Vector2, List<List<Vector2>>>();
             intersectionsPerStreamline = new Dictionary<int, List<Vector2>>();
+            _loopsReady = true;
         }
 
         /// Get the closest node to this grid point, if it exists.
@@ -138,6 +142,8 @@ namespace CityGen.Util
         /// Add streamlines to the graph.
         public void AddStreamlines(List<List<Vector2>> streamlines)
         {
+            _loopsReady = false;
+
             // Find intersections between streamlines.
             foreach (var streamline in streamlines)
             {
@@ -316,8 +322,14 @@ namespace CityGen.Util
         /// Find closed loops in the graph.
         public void FindClosedLoops(int maxSize = 10)
         {
-            var loopHashes = new HashSet<int>();
+            if (_loopsReady)
+            {
+                return;
+            }
 
+            Loops.Clear();
+
+            var loopHashes = new HashSet<int>();
             var visited = new HashSet<Node>();
             var currentLoop = new List<Node>();
 

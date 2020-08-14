@@ -5,6 +5,28 @@ using System.Linq;
 
 namespace CityGen.Util
 {
+    public struct BoundingBox
+    {
+        /// The center point of the bounding box.
+        public readonly Vector2 Center;
+
+        /// The extends of the bounding box (equal to half the size).
+        public readonly Vector2 Extents;
+
+        /// Constructor.
+        public BoundingBox(Vector2 center, Vector2 extents)
+        {
+            Center = center;
+            Extents = extents;
+        }
+
+        /// The top right point of the bounding box.
+        public Vector2 Max => Center + Extents;
+
+        /// The bottom left point of the bounding box.
+        public Vector2 Min => Center - Extents;
+    }
+
     public class Polygon
     {
         /// The points of the polygon.
@@ -12,6 +34,9 @@ namespace CityGen.Util
 
         /// Cached area of the polygon.
         private float? _area;
+
+        /// The bounding box of the polygon.
+        private BoundingBox? _boundingBox;
 
         /// C'tor.
         public Polygon(Vector2[] points)
@@ -24,6 +49,9 @@ namespace CityGen.Util
         public Polygon(IEnumerable<Vector2> points) : this(points.ToArray())
         {
         }
+
+        /// Whether or not this polygon is valid.
+        public bool Valid => Area > 0f;
 
         /// Area of the polygon.
         public float Area
@@ -93,6 +121,60 @@ namespace CityGen.Util
              }
 
              return inside;
+        }
+
+        /// Get (or calculate) the bounding box of this polygon.
+        public BoundingBox BoundingBox
+        {
+            get
+            {
+                if (_boundingBox == null)
+                {
+                    var minX = float.PositiveInfinity;
+                    var minY = float.PositiveInfinity;
+                    var maxX = float.NegativeInfinity;
+                    var maxY = float.NegativeInfinity;
+
+                    foreach (var pt in Points)
+                    {
+                        minX = MathF.Min(minX, pt.x);
+                        minY = MathF.Min(minY, pt.y);
+                        maxX = MathF.Max(maxX, pt.x);
+                        maxY = MathF.Max(maxY, pt.y);
+                    }
+
+                    var extents = new Vector2((maxX - minX) * .5f, (maxY - minY) * .5f);
+                    var center = new Vector2(minX + extents.x, minY + extents.y);
+
+                    _boundingBox = new BoundingBox(center, extents);
+                }
+
+                return _boundingBox.Value;
+            }
+        }
+
+        /// Get a random point in the polygon.
+        public Vector2 RandomPoint
+        {
+            get
+            {
+                var bb = BoundingBox;
+                var min = bb.Min;
+                var max = bb.Max;
+                
+                var maxTries = 250;
+                for (var i = 0; i < maxTries; ++i)
+                {
+                    var pt = new Vector2(RNG.Next(min.x, max.x), RNG.Next(min.y, max.y));
+                    if (Contains(pt))
+                    {
+                        return pt;
+                    }
+                }
+                
+                Console.Error.WriteLine("could not generate random point in polygon");
+                return RNG.RandomElement(Points);
+            }
         }
     }
 }
