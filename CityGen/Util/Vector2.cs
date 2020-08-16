@@ -2,7 +2,7 @@ using System;
 
 namespace CityGen.Util
 {
-    public readonly struct Vector2
+    public readonly struct Vector2: IComparable<Vector2>, IEquatable<Vector2>
     {
         /// The x value of the vector.
         public readonly float x;
@@ -39,7 +39,7 @@ namespace CityGen.Util
         /// Cross product with another vector.
         public float Cross(Vector2 v)
         {
-            return y * v.y - x * v.x;
+            return x * v.y - v.x * y;
         }
 
         /// Dot product of this vector with another vector.
@@ -86,6 +86,12 @@ namespace CityGen.Util
             }
         }
 
+        /// Return a clockwise perpendicular vector of this vector.
+        public Vector2 PerpendicularClockwise => new Vector2(y, -x);
+        
+        /// Return a counter-clockwise perpendicular vector of this vector.
+        public Vector2 PerpendicularCounterClockwise => new Vector2(-y, x);
+
         /// Return this vector rotated by an angle in radians.
         public Vector2 Rotated(Vector2 center, float angle)
         {
@@ -128,6 +134,18 @@ namespace CityGen.Util
             return new Vector2(v1.x / f, v1.y / f);
         }
 
+        /// Comparison.
+        public int CompareTo(Vector2 other)
+        {
+            var cmp = x.CompareTo(other.x);
+            if (cmp != 0)
+            {
+                return cmp;
+            }
+
+            return y.CompareTo(other.y);
+        }
+
         /// Equality comparison.
         public override bool Equals(object obj)
         {
@@ -145,6 +163,11 @@ namespace CityGen.Util
         public bool Equals(Vector2 other)
         {
             return x.Equals(other.x) && y.Equals(other.y);
+        }
+
+        public bool ApproximatelyEquals(Vector2 other, float tolerance)
+        {
+            return (x - other.x) < tolerance && (y - other.y) < tolerance;
         }
 
         public override int GetHashCode()
@@ -165,6 +188,61 @@ namespace CityGen.Util
         public override string ToString()
         {
             return $"Vector2({x:n2}, {y:n2})";
+        }
+        
+        public enum PointPosition
+        {
+            Left, Right, OnLine
+        }
+
+        public static PointPosition GetPointPosition(Vector2 a, Vector2 b, Vector2 p)
+        {
+            var cross = (p - a).Cross(b - a);
+
+            if (cross > 0f)
+            {
+                return PointPosition.Right;
+            }
+
+            if (cross < 0f)
+            {
+                return PointPosition.Left;
+            }
+
+            return PointPosition.OnLine;
+        }
+        
+        public static Vector2 NearestPointOnLine(Vector2 p0, Vector2 p1, Vector2 pnt)
+        {
+            var dir = p1 - p0;
+            var lineDir = dir.Normalized;
+
+            var v = pnt - p0;
+            var d = v.Dot(lineDir);
+
+            if (d < 0)
+                return p0;
+
+            if (d > dir.Magnitude)
+                return p1;
+
+            return p0 + lineDir * d;
+        }
+
+        public static float DistanceToLine(Vector2 p0, Vector2 p1, Vector2 pnt)
+        {
+            var nearestPt = NearestPointOnLine(p0, p1, pnt);
+            return (nearestPt - pnt).Magnitude;
+        }
+
+        public static float Clamp(float f, float min, float max)
+        {
+            return MathF.Max(min, MathF.Min(f, max));
+        }
+
+        public Vector2 Clamped(Vector2 min, Vector2 max)
+        {
+            return new Vector2(Clamp(x, min.x, max.x), Clamp(y, min.y, max.y));
         }
     }
 }

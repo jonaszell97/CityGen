@@ -26,6 +26,17 @@ namespace CityGen.Util
                 Position = position;
                 Neighbors = new List<Tuple<Node, Vector2[]>>();
             }
+
+            /// Add a neighbor to this node.
+            public void AddNeighbor(Node node, Vector2[] path = null)
+            {
+                if (path == null)
+                {
+                    path = new[] {Position, node.Position};
+                }
+
+                Neighbors.Add(Tuple.Create(node, path));
+            }
         }
 
         /// A closed loop in the graph.
@@ -117,7 +128,30 @@ namespace CityGen.Util
             Loops = new HashSet<ClosedLoop>();
             foundIntersections = new Dictionary<Vector2, List<List<Vector2>>>();
             intersectionsPerStreamline = new Dictionary<int, List<Vector2>>();
-            _loopsReady = true;
+            _loopsReady = false;
+        }
+
+        /// Get or create a node.
+        public Node GetOrCreateNode(Vector2 pos, float tolerance = 0f)
+        {
+            if (tolerance > 0f)
+            {
+                var closest = GetClosestNode(pos, tolerance * tolerance);
+                if (closest != null)
+                {
+                    return closest;
+                }
+            }
+
+            if (GraphNodes.TryGetValue(pos, out var node))
+            {
+                return node;
+            }
+
+            node = new Node(GraphNodes.Count, pos);
+            GraphNodes.Add(pos, node);
+
+            return node;
         }
 
         /// Get the closest node to this grid point, if it exists.

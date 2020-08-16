@@ -302,18 +302,19 @@ namespace CityGen
         {
             RNG.Reseed(112121);
 
-            var map = new Map(new Vector2(2000f, 2000f), new Vector2(0f, 0f), true);
-            map.InitializeRandom();
-            map.GenerateMainRoads();
-            map.GenerateMajorRoads();
-
-            map.AddParks(0.05f, 500f);
-            map.FinalizeMap();
-            // map.GenerateMinorRoads();
-
-            PNGExporter.ExportPNG(map, "/Users/Jonas/Downloads/TEST_MAP.png", 2048);
-            PNGExporter.ExportGraph(map, "/Users/Jonas/Downloads/TEST_GRAPH.png", 2048);
-            PNGExporter.ExportTensorField(map, "/Users/Jonas/Downloads/TEST_TENSOR.png", 2048);
+            Voronoi.Test();
+            // var map = new Map(new Vector2(2000f, 2000f), new Vector2(0f, 0f), true);
+            // map.InitializeRandom();
+            // map.GenerateMainRoads();
+            // map.GenerateMajorRoads();
+            //
+            // map.AddParks(0.05f, 500f);
+            // map.FinalizeMap();
+            // // map.GenerateMinorRoads();
+            //
+            // PNGExporter.ExportPNG(map, "/Users/Jonas/Downloads/TEST_MAP.png", 2048);
+            // PNGExporter.ExportGraph(map, "/Users/Jonas/Downloads/TEST_GRAPH.png", 2048);
+            // PNGExporter.ExportTensorField(map, "/Users/Jonas/Downloads/TEST_TENSOR.png", 2048);
         }
     }
 }
