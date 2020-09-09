@@ -104,7 +104,7 @@ namespace CityGen.Util
                     {
                         foreach (var neighbor in node.Value.Neighbors)
                         {
-                            DrawRoad(size, resolution, graphics, neighbor.Item2, linePen, null, scale);
+                            DrawRoad(size, resolution, graphics, neighbor.Value, linePen, null, scale);
                         }
                     }
 
@@ -170,7 +170,8 @@ namespace CityGen.Util
         /// Draw a voronoi diagram.
         public static void DrawVoronoi(Voronoi voronoi, string fileName, int resolution, float scale = 1.0f,
                                        List<Tuple<Vector2, Vector2, Color>> linesToDraw = null,
-                                       List<Tuple<Vector2, Color>> pointsToDraw = null)
+                                       List<Tuple<Vector2, Color>> pointsToDraw = null,
+                                       bool drawNames = false)
         {
             if (_voronoiColors == null)
             {
@@ -190,13 +191,14 @@ namespace CityGen.Util
 
                     var linePen = new Pen(Color.Black, 1f);
                     var siteBrush = new SolidBrush(Color.Black);
+                    Polygon[] polygons = null;
 
                     int n;
                     if (voronoi.Polygons != null)
                     {
                         n = voronoi.Polygons.Length - 1;
 
-                        var polygons = new Polygon[voronoi.Polygons.Length];
+                        polygons = new Polygon[voronoi.Polygons.Length];
                         voronoi.Polygons.CopyTo(polygons, 0);
                         Array.Sort(polygons, (p1, p2) => p1.Area.CompareTo(p2.Area));
 
@@ -239,6 +241,18 @@ namespace CityGen.Util
                     foreach (var pt in voronoi.Points)
                     {
                         graphics.FillCircle(siteBrush, GetGlobalCoordinate(voronoi.Size, pt, resolution, scale), 2f);
+                    }
+
+                    if (drawNames && polygons != null)
+                    {
+                        var font = new Font("Arial", 14);
+                        var textBrush = new SolidBrush(Color.Black);
+
+                        foreach (var poly in polygons)
+                        {
+                            graphics.DrawString((n++).ToString(), font, textBrush, 
+                                GetGlobalCoordinate(voronoi.Size, poly.Centroid, resolution, scale));
+                        }
                     }
 
                     if (linesToDraw != null)
@@ -291,7 +305,10 @@ namespace CityGen.Util
                     var i = 0;
                     var prev = (Voronoi.Edge?)null;
 
-                    foreach (var edge in voronoi.Edges)
+                    var edges = voronoi.Edges.ToArray();
+                    Array.Sort(edges, (edge, edge1) => edge.Start.CompareTo(edge1.Start));
+
+                    foreach (var edge in edges)
                     {
                         var p0 = GetGlobalCoordinate(voronoi.Size, edge.Start, resolution, scale);
                         var p1 = GetGlobalCoordinate(voronoi.Size, edge.End, resolution, scale);
@@ -306,6 +323,39 @@ namespace CityGen.Util
 
                         drawing.Save($"{directory}/edge{i++}.png");
                         prev = edge;
+                    }
+                }
+            }
+        }
+        
+        public static void DrawVoronoiPolys(Voronoi voronoi, string directory, int resolution, float scale = 1.0f)
+        {
+            using (var drawing = new Bitmap(resolution, resolution))
+            {
+                using (var graphics = Graphics.FromImage(drawing))
+                {
+                    graphics.CompositingQuality = CompositingQuality.HighQuality;
+                    graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                    graphics.CompositingMode = CompositingMode.SourceCopy;
+                    graphics.SmoothingMode = SmoothingMode.HighQuality;
+
+                    graphics.FillRectangle(new SolidBrush(Color.White), 0, 0, resolution, resolution);
+
+                    var siteBrush = new SolidBrush(Color.Black);
+                    var i = 0;
+                    foreach (var poly in voronoi.Polygons)
+                    {
+                        var brush = new SolidBrush(RNG.RandomColor);
+                        graphics.FillPolygon(brush,
+                            poly.Points.Select(p => GetGlobalCoordinate(voronoi.Size, p, resolution, scale))
+                                .ToArray());
+                        
+                        foreach (var pt in voronoi.Points)
+                        {
+                            graphics.FillCircle(siteBrush, GetGlobalCoordinate(voronoi.Size, pt, resolution, scale), 2f);
+                        }
+
+                        drawing.Save($"{directory}/poly{i++}.png");
                     }
                 }
             }

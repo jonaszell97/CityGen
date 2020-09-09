@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace CityGen.Util
 {
@@ -167,7 +168,7 @@ namespace CityGen.Util
 
         public bool ApproximatelyEquals(Vector2 other, float tolerance)
         {
-            return (x - other.x) < tolerance && (y - other.y) < tolerance;
+            return MathF.Abs(x - other.x) < tolerance && MathF.Abs(y - other.y) < tolerance;
         }
 
         public override int GetHashCode()
@@ -243,6 +244,27 @@ namespace CityGen.Util
         public Vector2 Clamped(Vector2 min, Vector2 max)
         {
             return new Vector2(Clamp(x, min.x, max.x), Clamp(y, min.y, max.y));
+        }
+    }
+
+    public struct Vector2ApproximateEqualityComparer : IEqualityComparer<Vector2>
+    {
+        /// The equality comparison tolerance.
+        private readonly float _tolerance;
+
+        public Vector2ApproximateEqualityComparer(float tolerance)
+        {
+            _tolerance = tolerance;
+        }
+
+        public bool Equals(Vector2 x, Vector2 y)
+        {
+            return x.ApproximatelyEquals(y, _tolerance);
+        }
+
+        public int GetHashCode(Vector2 obj)
+        {
+            return HashCode.Combine((int)obj.x, (int)obj.y);
         }
     }
 }

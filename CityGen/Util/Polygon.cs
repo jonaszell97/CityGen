@@ -77,21 +77,21 @@ namespace CityGen.Util
         }
 
         /// The centroid of the polygon.
-        public Vector2 Centroid
+        public Vector2 Centroid => GetCentroid(Points);
+
+        /// Compute the centroid of a set of points.
+        public static Vector2 GetCentroid(IReadOnlyList<Vector2> points)
         {
-            get
+            var xSum = 0f;
+            var ySum = 0f;
+
+            foreach (var pt in points)
             {
-                var xSum = 0f;
-                var ySum = 0f;
-
-                foreach (var pt in Points)
-                {
-                    xSum += pt.x;
-                    ySum += pt.y;
-                }
-
-                return new Vector2(xSum / Points.Length, ySum / Points.Length);
+                xSum += pt.x;
+                ySum += pt.y;
             }
+
+            return new Vector2(xSum / points.Count, ySum / points.Count);
         }
 
         /// Scale this polygon by a given amount.

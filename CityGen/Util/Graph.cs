@@ -17,25 +17,38 @@ namespace CityGen.Util
             public readonly Vector2 Position;
 
             /// The neighboring nodes.
-            public readonly List<Tuple<Node, Vector2[]>> Neighbors;
+            public readonly Dictionary<Node, Vector2[]> Neighbors;
 
             /// Create a new node.
             public Node(int id, Vector2 position)
             {
                 ID = id;
                 Position = position;
-                Neighbors = new List<Tuple<Node, Vector2[]>>();
+                Neighbors = new Dictionary<Node, Vector2[]>();
             }
 
             /// Add a neighbor to this node.
-            public void AddNeighbor(Node node, Vector2[] path = null)
+            public void AddNeighbor(Node node, Vector2[] path = null, bool ignoreDuplicate = false)
             {
-                if (path == null)
+                Debug.Assert(node != this, "node cannot be its own neighbor!");
+
+                if (Neighbors.ContainsKey(node))
                 {
-                    path = new[] {Position, node.Position};
+                    if (ignoreDuplicate)
+                    {
+                        return;
+                    }
+
+                    Debug.Assert(false, "duplicate neighboring node!");
                 }
 
-                Neighbors.Add(Tuple.Create(node, path));
+                path ??= new[] {Position, node.Position};
+                Neighbors.Add(node, path);
+
+                if (!node.Neighbors.ContainsKey(this))
+                {
+                    node.AddNeighbor(this, path.Reverse().ToArray(), true);
+                }
             }
         }
 
@@ -69,19 +82,19 @@ namespace CityGen.Util
                     var node = Nodes[i];
                     foreach (var neighbor in node.Neighbors)
                     {
-                        if (neighbor.Item1 != next)
+                        if (neighbor.Key != next)
                         {
                             continue;
                         }
 
-                        if (neighbor.Item2.First().Equals(node.Position))
+                        if (neighbor.Value.First().Equals(node.Position))
                         {
-                            points.AddRange(neighbor.Item2);
+                            points.AddRange(neighbor.Value);
                         }
                         else
                         {
-                            Debug.Assert(neighbor.Item2.Last().Equals(node.Position));
-                            points.AddRange(neighbor.Item2.AsEnumerable().Reverse());
+                            Debug.Assert(neighbor.Value.Last().Equals(node.Position));
+                            points.AddRange(neighbor.Value.AsEnumerable().Reverse());
                         }
 
                         break;
@@ -270,7 +283,7 @@ namespace CityGen.Util
 
                         if (GraphNodes.TryGetValue(intersections[i], out neighboringNode))
                         {
-                            node.Neighbors.Add(Tuple.Create(neighboringNode, segment.ToArray()));
+                            node.AddNeighbor(neighboringNode, segment.ToArray());
                             break;
                         }
                     }
@@ -284,7 +297,7 @@ namespace CityGen.Util
 
                         if (GraphNodes.TryGetValue(intersections[i], out neighboringNode))
                         {
-                            node.Neighbors.Add(Tuple.Create(neighboringNode, segment.ToArray()));
+                            node.AddNeighbor(neighboringNode, segment.ToArray());
                             break;
                         }
                     }
@@ -352,6 +365,20 @@ namespace CityGen.Util
 
             return new Vector2(x, y);
         }
+        
+        private static Vector2 GetCentroid(IReadOnlyList<Node> points)
+        {
+            var xSum = 0f;
+            var ySum = 0f;
+
+            foreach (var pt in points)
+            {
+                xSum += pt.Position.x;
+                ySum += pt.Position.y;
+            }
+
+            return new Vector2(xSum / points.Count, ySum / points.Count);
+        }
 
         /// Find closed loops in the graph.
         public void FindClosedLoops(int maxSize = 10)
@@ -363,7 +390,7 @@ namespace CityGen.Util
 
             Loops.Clear();
 
-            var loopHashes = new HashSet<int>();
+            var loopCentroids = new HashSet<Vector2>(new Vector2ApproximateEqualityComparer(0.01f));
             var visited = new HashSet<Node>();
             var currentLoop = new List<Node>();
 
@@ -382,6 +409,11 @@ namespace CityGen.Util
 
                     var current = neighboringNode;
                     var foundPoly = false;
+                    
+                    if (baseNode.ID == 28 && neighboringNode.ID == 27)
+                    {
+                        _ = 3;
+                    }
 
                     // Continue to new nodes until we reach the base node again.
                     while (true)
@@ -402,7 +434,7 @@ namespace CityGen.Util
                         {
                             if (visited.Contains(potentialNext))
                             {
-                                if (potentialNext == baseNode && currentLoop.Count >= 3)
+                                if (potentialNext == baseNode && currentLoop.Count > 3)
                                 {
                                     foundPoly = true;
                                     break;
@@ -413,6 +445,12 @@ namespace CityGen.Util
 
                             var nextDirection = potentialNext.Position - current.Position;
                             var angle = baseDirection.AngleTo(nextDirection);
+                            
+                            // Only follow angles to the right.
+                            if (!(angle > 0f && angle < 2f * MathF.PI))
+                            {
+                                continue;
+                            }
 
                             if (!rightMostAngle.HasValue || angle >= rightMostAngle.Value)
                             {
@@ -430,7 +468,8 @@ namespace CityGen.Util
                         current = next;
                     }
 
-                    if (!foundPoly || !loopHashes.Add(ClosedLoop.GetHashCode(currentLoop)))
+                    var centroid = GetCentroid(currentLoop);
+                    if (!foundPoly || !loopCentroids.Add(centroid))
                     {
                         continue;
                     }
@@ -438,6 +477,8 @@ namespace CityGen.Util
                     Loops.Add(new ClosedLoop(currentLoop.ToArray()));
                 }
             }
+
+            _loopsReady = true;
         }
     }
 }

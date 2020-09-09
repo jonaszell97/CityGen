@@ -300,7 +300,7 @@ namespace CityGen
     {
         static void Main(string[] args)
         {
-            RNG.Reseed(112121);
+            RNG.Reseed(898);
 
             Voronoi.Test();
             // var map = new Map(new Vector2(2000f, 2000f), new Vector2(0f, 0f), true);

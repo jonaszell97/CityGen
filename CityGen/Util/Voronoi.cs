@@ -25,6 +25,8 @@ namespace CityGen.Util
         /// Create a voronoi diagram from a set of points.
         public Voronoi(List<Vector2> points, Vector2? size = null)
         {
+            Debug.Assert(points.ToHashSet().Count == points.Count, "points are not unique!");
+
             Points = points;
             Edges = new HashSet<Edge>();
 
@@ -35,7 +37,7 @@ namespace CityGen.Util
                 var max = bb.Max;
                 var min = bb.Min;
 
-                Size = new Vector2((max.x - min.x) * 0.6f, (max.y - min.y) * 0.6f);
+                Size = new Vector2((max.x - min.x) * .51f, (max.y - min.y) * .51f);
             }
             else
             {
@@ -48,7 +50,7 @@ namespace CityGen.Util
         /// An edge between two points.
         public struct Edge
         {
-            private static readonly float EDGE_RESOLUTION = 0.1f;
+            internal static readonly float EDGE_RESOLUTION = 0.0005f;
 
             /// The start point of the edge.
             public readonly Vector2 Start;
@@ -67,6 +69,8 @@ namespace CityGen.Util
 
                 Start = GetClosestPt(v1);
                 End = GetClosestPt(v2);
+                
+                Debug.Assert(!Start.Equals(End));
             }
 
             /// Find the closest grid point to a point.
@@ -121,68 +125,6 @@ namespace CityGen.Util
                 Edges = new HashSet<Edge>();
             }
 
-            /// Create the polygon that makes up this cell.
-            public Polygon CreatePolygon()
-            {
-                var points = new Vector2[Edges.Count];
-                var firstEdge = Edges.First();
-                var currentPt = firstEdge.Start;
-                var nextPt = firstEdge.End;
-                var tolerance = 0.01f;
-
-                var done = new HashSet<Edge> { firstEdge };
-                for (var currentIdx = 0; currentIdx < points.Length - 1; ++currentIdx)
-                {
-                    points[currentIdx] = currentPt;
-
-                    if (currentIdx == points.Length - 2)
-                    {
-                        points[currentIdx + 1] = nextPt;
-                        break;
-                    }
-
-                    // Find the next edge.
-                    var found = false;
-                    foreach (var edge in Edges)
-                    {
-                        if (done.Contains(edge))
-                        {
-                            continue;
-                        }
-
-                        if (edge.Start.ApproximatelyEquals(nextPt, tolerance))
-                        {
-                            currentPt = nextPt;
-                            nextPt = edge.End;
-                            done.Add(edge);
-                            found = true;
-
-                            break;
-                        }
-
-                        if (edge.End.ApproximatelyEquals(nextPt, tolerance))
-                        {
-                            currentPt = nextPt;
-                            nextPt = edge.Start;
-                            done.Add(edge);
-                            found = true;
-
-                            break;
-                        }
-                    }
-
-                    if (!found)
-                    {
-                        Console.Error.WriteLine("no matching edge found!");
-                        return null;
-                    }
-
-                    // Debug.Assert(found, "no matching edge found!");
-                }
-
-                return new Polygon(points);
-            }
-
             /// Remove an edge from this cell.
             public void RemoveEdge(Edge edge)
             {
@@ -194,6 +136,28 @@ namespace CityGen.Util
             {
                 Edges.Add(newEdge);
             }
+        }
+        
+        public static Vector2.PointPosition GetPointPosition(Vector2 a, Vector2 b, Vector2 p, 
+                                                             float tolerance, bool rightPreferred)
+        {
+            var cross = (p - a).Cross(b - a);
+            if (rightPreferred)
+            {
+                if (cross > 0f || -cross < tolerance)
+                {
+                    return Vector2.PointPosition.Right;
+                }
+                
+                return Vector2.PointPosition.Left;
+            }
+            
+            if (cross < 0f || cross < tolerance)
+            {
+                return Vector2.PointPosition.Left;
+            }
+            
+            return Vector2.PointPosition.Right;
         }
 
         /// Calculate the perpendicular bisector of a line.
@@ -236,6 +200,22 @@ namespace CityGen.Util
             return Tuple.Create(e.Start, intersection);
         }
 
+        /// Refine the voronoi diagram by setting the new sites to be the centroids of existing sites.
+        public Voronoi Refine()
+        {
+            var sites = new List<Vector2>();
+            foreach (var poly in Polygons)
+            {
+                sites.Add(poly.Centroid);
+            }
+
+            return new Voronoi(sites);
+        }
+
+#if VISUALIZE_VORONOI
+        private static int _diagramCount = 0;
+#endif
+
         /// Compute the voronoi diagram.
         /// Algorithm from https://courses.cs.washington.edu/courses/cse326/00wi/projects/voronoi.html
         private void CreateVoronoiDiagram()
@@ -244,42 +224,44 @@ namespace CityGen.Util
             var cells = new List<Cell>();
 
             // Add three or four "points at infinity" to C, to bound the diagram
-            var min = .0f;
+            var min = 0f;
             var max = 10f;
+            var boundingRect = new Vector2(Size.x * 2.5f, Size.y * 2.5f);
+
             cells.Add(new Cell(
-                new Vector2(-Size.x, -Size.y),
+                new Vector2(-boundingRect.x, -boundingRect.y),
                 new []
                 {
-                    new Vector2(min * Size.x,  min * Size.y),
-                    new Vector2(min * Size.x,  -max * Size.y),
-                    new Vector2(-max * Size.x, min * Size.y),
+                    new Vector2(min * boundingRect.x,  min * boundingRect.y),
+                    new Vector2(min * boundingRect.x,  -max * boundingRect.y),
+                    new Vector2(-max * boundingRect.x, min * boundingRect.y),
                 }));
             
             cells.Add(new Cell(
-                new Vector2(Size.x, -Size.y),
+                new Vector2(boundingRect.x, -boundingRect.y),
                 new []
                 {
-                    new Vector2(-min * Size.x, min * Size.y),
-                    new Vector2(max * Size.x,  min * Size.y),
-                    new Vector2(-min * Size.x, -max * Size.y), 
+                    new Vector2(-min * boundingRect.x, min * boundingRect.y),
+                    new Vector2(max * boundingRect.x,  min * boundingRect.y),
+                    new Vector2(-min * boundingRect.x, -max * boundingRect.y), 
                 }));
             
             cells.Add(new Cell(
-                new Vector2(Size.x, Size.y),
+                new Vector2(boundingRect.x, boundingRect.y),
                 new []
                 {
-                    new Vector2(-min * Size.x, -min * Size.y),
-                    new Vector2(-min * Size.x, max * Size.y),
-                    new Vector2(max * Size.x,  -min * Size.y),
+                    new Vector2(-min * boundingRect.x, -min * boundingRect.y),
+                    new Vector2(-min * boundingRect.x, max * boundingRect.y),
+                    new Vector2(max * boundingRect.x,  -min * boundingRect.y),
                 }));
             
             cells.Add(new Cell(
-                new Vector2(-Size.x, Size.y),
+                new Vector2(-boundingRect.x, boundingRect.y),
                 new []
                 {
-                    new Vector2(min * Size.x,  -min * Size.y),
-                    new Vector2(-max * Size.x, -min * Size.y),
-                    new Vector2(min * Size.x,  max * Size.y),
+                    new Vector2(min * boundingRect.x,  -min * boundingRect.y),
+                    new Vector2(-max * boundingRect.x, -min * boundingRect.y),
+                    new Vector2(min * boundingRect.x,  max * boundingRect.y),
                 }));
 
             foreach (var c in cells)
@@ -293,15 +275,24 @@ namespace CityGen.Util
             // Create a data structure X to hold the critical points
             var criticalPoints = new List<Vector2>();
             var edgeModifications = new List<Tuple<Edge, Tuple<Vector2, Vector2>>>();
+            var pointPositionTolerance = 0.001f;
 
 #if VISUALIZE_VORONOI
             var img = 0;
-            var dir = "~/VTEST";
+            var dir = $"/Users/Jonas/Downloads/VTEST{_diagramCount++}";
             var linesToDraw = new List<Tuple<Vector2, Vector2, System.Drawing.Color>>();
             var pointsToDraw = new List<Tuple<Vector2, System.Drawing.Color>>();
             var scale = 10f;
-            var resolution = 512;
+            var resolution = 1024;
 
+            try
+            {
+                System.IO.Directory.Delete(dir, true);
+            }
+            catch (System.IO.DirectoryNotFoundException _)
+            {}
+
+            System.IO.Directory.CreateDirectory(dir);
             PNGExporter.DrawVoronoi(this, $"{dir}/{img++}.png", resolution, scale);
 #endif
 
@@ -348,8 +339,8 @@ namespace CityGen.Util
                     foreach (var edge in c.Edges)
                     {
                         // Test the spatial relationship between e and pb.
-                        var pos1 = Vector2.GetPointPosition(pb.Item1, pb.Item2, edge.Start);
-                        var pos2 = Vector2.GetPointPosition(pb.Item1, pb.Item2, edge.End);
+                        var pos1 = GetPointPosition(pb.Item1, pb.Item2, edge.Start, pointPositionTolerance, true);
+                        var pos2 = GetPointPosition(pb.Item1, pb.Item2, edge.End, pointPositionTolerance, true);
 
                         var intersects = pos1 != pos2;
 
@@ -453,8 +444,8 @@ namespace CityGen.Util
                 foreach (var edge in Edges)
                 {
                     // Test the spatial relationship between e and border.
-                    var pos1 = Vector2.GetPointPosition(border.Item1, border.Item2, edge.Start);
-                    var pos2 = Vector2.GetPointPosition(border.Item1, border.Item2, edge.End);
+                    var pos1 = GetPointPosition(border.Item1, border.Item2, edge.Start, pointPositionTolerance, false);
+                    var pos2 = GetPointPosition(border.Item1, border.Item2, edge.End, pointPositionTolerance, false);
 
                     var intersects = pos1 != pos2;
 
@@ -492,25 +483,31 @@ namespace CityGen.Util
                 if (vertical)
                 {
                     criticalPoints.Sort((p1, p2) => p1.y.CompareTo(p2.y));
+                    Edges.RemoveWhere(e => e.Start.x.Equals(e.End.x) && e.Start.x.Equals(border.Item1.x));
                 }
                 else
                 {
                     criticalPoints.Sort((p1, p2) => p1.x.CompareTo(p2.x));
+                    Edges.RemoveWhere(e => e.Start.y.Equals(e.End.y) && e.Start.y.Equals(border.Item1.y));
                 }
 
                 // Create new edges to connect adjacent points in P, and add these edges to E
+                var prev = criticalPoints[0];
                 for (var i = 1; i < criticalPoints.Count; ++i)
                 {
-                    var start = criticalPoints[i - 1];
+                    var start = prev;
                     var end = criticalPoints[i];
 
-                    if (start.Equals(end))
+                    if (start.ApproximatelyEquals(end, Edge.EDGE_RESOLUTION))
                     {
+                        prev = end;
                         continue;
                     }
                     
                     var newEdge = new Edge(start, end);
                     Edges.Add(newEdge);
+
+                    prev = end;
                 }
             }
 
@@ -518,15 +515,10 @@ namespace CityGen.Util
             PNGExporter.DrawVoronoi(this, $"{dir}/{img}.png", resolution * 4, scale);
 #endif
 
-            // Remove borders as edges.
-            foreach (var border in borders)
-            {
-                Edges.RemoveWhere(e => e.Start.Equals(border.Item1) && e.End.Equals(border.Item2));
-            }
-
             // Build a graph from the edges.
             var graph = new Graph();
-            var tolerance = 2f;
+            var tolerance = 0.01f;
+
             foreach (var edge in Edges)
             {
                 var startNode = graph.GetOrCreateNode(edge.Start, tolerance);
@@ -542,45 +534,50 @@ namespace CityGen.Util
 
                     if (otherEdge.Start.Equals(edge.Start))
                     {
-                        startNode.AddNeighbor(graph.GetOrCreateNode(otherEdge.End, tolerance));
+                        startNode.AddNeighbor(graph.GetOrCreateNode(otherEdge.End, tolerance), null, true);
                     }
                     else if (otherEdge.Start.Equals(edge.End))
                     {
-                        endNode.AddNeighbor(graph.GetOrCreateNode(otherEdge.End, tolerance));
+                        endNode.AddNeighbor(graph.GetOrCreateNode(otherEdge.End, tolerance), null, true);
                     }
                     
                     if (otherEdge.End.Equals(edge.Start))
                     {
-                        startNode.AddNeighbor(graph.GetOrCreateNode(otherEdge.Start, tolerance));
+                        startNode.AddNeighbor(graph.GetOrCreateNode(otherEdge.Start, tolerance), null, true);
                     }
                     else if (otherEdge.End.Equals(edge.End))
                     {
-                        endNode.AddNeighbor(graph.GetOrCreateNode(otherEdge.Start, tolerance));
+                        endNode.AddNeighbor(graph.GetOrCreateNode(otherEdge.Start, tolerance), null, true);
                     }
                 }
             }
 
-#if VISUALIZE_VORONOI
-            PNGExporter.DrawVoronoiEdges(this, dir, resolution, scale);
-#endif
-
             // Build polygons.
             graph.FindClosedLoops();
-            PNGExporter.ExportGraph(graph, Size, "/Users/Jonas/Downloads/VORONOI_GRAPH.png", 2048, 5f);
-            Polygons = graph.Loops.Select(loop => loop.Poly).ToArray();
+
+#if VISUALIZE_VORONOI
+            PNGExporter.DrawVoronoiEdges(this, dir, resolution, scale);
+            PNGExporter.ExportGraph(graph, Size, $"{dir}/VORONOI_GRAPH.png", 2048, 5f);
+#endif
+
+            Polygons = graph.Loops.Select(loop => loop.Poly).Where(poly => Points.Any(poly.Contains)).ToArray();
         }
 
         public static void Test()
         {
             var size = new Vector2(1000f, 1000f);
             var pts = new List<Vector2>();
-            for (var i = 0; i < 20; ++i)
+            for (var i = 0; i < 500; ++i)
             {
                 pts.Add(new Vector2(RNG.Next(-size.x * .5f, size.x * .5f), RNG.Next(-size.y * .5f, size.y * .5f)));
             }
 
-            var v = new Voronoi(pts, size);
-            PNGExporter.DrawVoronoi(v, "/Users/Jonas/Downloads/VORONOI.png", 1024, 10f);
+            var v = new Voronoi(pts);
+            v = v.Refine();
+
+            PNGExporter.DrawVoronoi(v, "/Users/Jonas/Downloads/VORONOI.png", 1024, 2f);
+            // PNGExporter.DrawVoronoiPolys(v, "/Users/Jonas/Downloads/VTEST", 1024, 2f);
+            // PNGExporter.DrawVoronoiEdges(v, "/Users/Jonas/Downloads/VTEST", 512, 3f);
         }
     }
 }
