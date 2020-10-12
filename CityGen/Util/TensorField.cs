@@ -144,6 +144,11 @@ namespace CityGen.Util
                 tensorSum.Rotate(GetRotationalNoise(pt, NoiseParams.NoiseSizeGlobal, NoiseParams.NoiseAngleGlobal));
             }
 
+            if (tensorSum.IsZero)
+            {
+                return new Tensor(1f, new Vector2(0f, 0f));
+            }
+
             return tensorSum;
         }
 

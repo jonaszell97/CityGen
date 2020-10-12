@@ -132,7 +132,7 @@ namespace CityGen
             AddGridAtLocation(newOrigin + size);
             AddGridAtLocation(newOrigin + new Vector2(size.x, 0f));
             AddGridAtLocation(newOrigin + new Vector2(0f, size.y));
-
+            
             for (var i = 0; i < numRadialFields; ++i)
             {
                 AddRandomRadial();
@@ -300,21 +300,21 @@ namespace CityGen
     {
         static void Main(string[] args)
         {
-            RNG.Reseed(898);
+            RNG.Reseed(3891231);
 
-            Voronoi.Test();
-            // var map = new Map(new Vector2(2000f, 2000f), new Vector2(0f, 0f), true);
-            // map.InitializeRandom();
-            // map.GenerateMainRoads();
-            // map.GenerateMajorRoads();
-            //
-            // map.AddParks(0.05f, 500f);
-            // map.FinalizeMap();
-            // // map.GenerateMinorRoads();
-            //
-            // PNGExporter.ExportPNG(map, "/Users/Jonas/Downloads/TEST_MAP.png", 2048);
-            // PNGExporter.ExportGraph(map, "/Users/Jonas/Downloads/TEST_GRAPH.png", 2048);
-            // PNGExporter.ExportTensorField(map, "/Users/Jonas/Downloads/TEST_TENSOR.png", 2048);
+            // Voronoi.Test();
+            var map = new Map(new Vector2(2000f, 2000f), new Vector2(0f, 0f), true);
+            map.InitializeRandom();
+            map.GenerateMainRoads();
+            map.GenerateMajorRoads();
+            
+            map.AddParks(0.05f, 500f);
+            map.FinalizeMap();
+            // map.GenerateMinorRoads();
+            
+            PNGExporter.ExportPNG(map, "/Users/Jonas/Downloads/TEST_MAP.png", 2048);
+            PNGExporter.ExportGraph(map, "/Users/Jonas/Downloads/TEST_GRAPH.png", 2048);
+            PNGExporter.ExportTensorField(map, "/Users/Jonas/Downloads/TEST_TENSOR.png", 2048);
         }
     }
 }

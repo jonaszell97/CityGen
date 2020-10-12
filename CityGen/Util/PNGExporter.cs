@@ -369,7 +369,34 @@ namespace CityGen.Util
         static void DrawRoad(Map map, int resolution, Graphics g, IReadOnlyList<Vector2> road,
                              Pen pen, string name = null)
         {
-            DrawRoad(map.WorldDimensions, resolution, g, road, pen, name);
+            var lines = road.Select(p => GetGlobalCoordinate(map, p, resolution)).ToArray();
+            g.DrawLines(pen, lines);
+
+            if (name == null)
+                return;
+
+            var idx = road.Count / 2;
+            var pt = road[idx];
+            var imgPt = GetGlobalCoordinate(map, pt, resolution);
+
+            if (!IsInBounds(imgPt, resolution))
+            {
+                for (idx = 0; idx < road.Count; ++idx)
+                {
+                    imgPt = GetGlobalCoordinate(map, road[idx], resolution);
+                    if (IsInBounds(imgPt, resolution))
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (idx < road.Count - 1)
+            {
+                g.DrawLine(new Pen(Color.Red), imgPt, GetGlobalCoordinate(map, road[idx + 1], resolution));
+            }
+
+            g.DrawString(name, new Font("Arial", 16), new SolidBrush(Color.Black), imgPt);
         }
 
         static void DrawRoad(Vector2 size, int resolution, Graphics g, IReadOnlyList<Vector2> road,

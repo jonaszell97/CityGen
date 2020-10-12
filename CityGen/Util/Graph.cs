@@ -283,7 +283,11 @@ namespace CityGen.Util
 
                         if (GraphNodes.TryGetValue(intersections[i], out neighboringNode))
                         {
-                            node.AddNeighbor(neighboringNode, segment.ToArray());
+                            if (neighboringNode != node)
+                            {
+                                node.AddNeighbor(neighboringNode, segment.ToArray(), true);
+                            }
+
                             break;
                         }
                     }
@@ -297,7 +301,11 @@ namespace CityGen.Util
 
                         if (GraphNodes.TryGetValue(intersections[i], out neighboringNode))
                         {
-                            node.AddNeighbor(neighboringNode, segment.ToArray());
+                            if (neighboringNode != node)
+                            {
+                                node.AddNeighbor(neighboringNode, segment.ToArray(), true);
+                            }
+
                             break;
                         }
                     }

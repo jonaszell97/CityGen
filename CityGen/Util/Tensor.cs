@@ -50,6 +50,9 @@ namespace CityGen.Util
         /// Create a zero tensor.
         public static Tensor Zero => new Tensor(0, new Vector2(0f, 0f));
 
+        /// Whether or not this tensor is zero.
+        public bool IsZero => Major.Magnitude.Equals(0f) && Minor.Magnitude.Equals(0f);
+
         /// Add another tensor to this one.
         public void Add(Tensor t, bool smooth)
         {
