@@ -1,10 +1,54 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
 using CityGen.Util;
+using Newtonsoft.Json;
 
 namespace CityGen
 {
+    [DataContract] struct MapParams
+    {
+        /// The map seed.
+        [DataMember] public int seed;
+
+        /// The map size.
+        [DataMember] public float size;
+
+        /// Whether or not the map is smooth.
+        [DataMember] public bool smooth;
+
+        /// The number of random radial fields to generate.
+        [DataMember] public int randomRadialFields;
+
+        /// The percentage of the map area covered by parks.
+        [DataMember] public float parkAreaPercentage;
+
+        /// The minimum distance in meters between two parks.
+        [DataMember] public float minDistanceBetweenParks;
+
+        /// The road parameters.
+        [DataMember] public List<StreamlineGenerator.Parameters> roadParameters;
+
+        public MapParams(int seed, float size,
+                         List<StreamlineGenerator.Parameters> roadParameters,
+                         float parkAreaPercentage,
+                         float minDistanceBetweenParks,
+                         bool smooth = true,
+                         int randomRadialFields = 0)
+        {
+            this.seed = seed;
+            this.size = size;
+            this.smooth = smooth;
+            this.randomRadialFields = randomRadialFields;
+            this.parkAreaPercentage = parkAreaPercentage;
+            this.minDistanceBetweenParks = minDistanceBetweenParks;
+            this.roadParameters = roadParameters;
+        }
+    }
+
     public class Map : TensorField
     {
         public static readonly float TENSOR_SPAWN_SCALE = .7f;
@@ -14,18 +58,6 @@ namespace CityGen
 
         /// The origin of the map to generate.
         public Vector2 WorldOrigin;
-
-        /// The main road parameters.
-        public StreamlineGenerator.Parameters MainRoadParams;
-
-        /// The major road parameters.
-        public StreamlineGenerator.Parameters MajorRoadParams;
-
-        /// The minor road parameters.
-        public StreamlineGenerator.Parameters MinorRoadParams;
-        
-        /// The park path parameters.
-        public StreamlineGenerator.Parameters PathParams;
 
         /// The generated roads.
         public List<Road> Roads;
@@ -51,75 +83,6 @@ namespace CityGen
             Generators = new List<Tuple<StreamlineGenerator, bool>>();
             Roads = new List<Road>();
             Graph = new Graph();
-            
-            MainRoadParams = new StreamlineGenerator.Parameters
-            {
-                DSep = 400f,
-                DTest = 200f,
-                PathIntegrationLimit = 2688,
-                MaxSeedTries = 300,
-                DStep = 1f,
-                DLookahead = 500f,
-                DCircleJoin = 5f,
-                RoadJoinAngle = 0.1f,
-                SimplificationTolerance = 0.5f,
-                EarlyCollisionProbability = 0f,
-
-                CulDeSacProbability = .01f,
-                CuLDeSacRadiusMin = 15f,
-                CuLDeSacRadiusMax = 25f,
-            };
-
-            MajorRoadParams = new StreamlineGenerator.Parameters
-            {
-                DSep = 100f,
-                DTest = 30f,
-                PathIntegrationLimit = 2688,
-                MaxSeedTries = 300,
-                DStep = 1f,
-                DLookahead = 200f,
-                DCircleJoin = 5f,
-                RoadJoinAngle = 0.1f,
-                SimplificationTolerance = 0.5f,
-                EarlyCollisionProbability = 0f,
-
-                CulDeSacProbability = .03f,
-                CuLDeSacRadiusMin = 7.5f,
-                CuLDeSacRadiusMax = 15f,
-            };
-
-            MinorRoadParams = new StreamlineGenerator.Parameters
-            {
-                DSep = 20f,
-                DTest = 15f,
-                PathIntegrationLimit = 2688,
-                MaxSeedTries = 300,
-                DStep = 1f,
-                DLookahead = 40f,
-                DCircleJoin = 5f,
-                RoadJoinAngle = 0.1f,
-                SimplificationTolerance = 0.5f,
-                EarlyCollisionProbability = 0f,
-
-                CulDeSacProbability = .05f,
-                CuLDeSacRadiusMin = 5f,
-                CuLDeSacRadiusMax = 10f,
-            };
-
-            PathParams = new StreamlineGenerator.Parameters
-            {
-                DSep = 20f,
-                DTest = 15f,
-                PathIntegrationLimit = 2688,
-                MaxSeedTries = 300,
-                DStep = 1f,
-                DLookahead = 40f,
-                DCircleJoin = 5f,
-                RoadJoinAngle = 0.1f,
-                SimplificationTolerance = 0.5f,
-                EarlyCollisionProbability = 0f,
-                CulDeSacProbability = 0f,
-            };
         }
 
         /// Initialize randomly.
@@ -138,27 +101,10 @@ namespace CityGen
                 AddRandomRadial();
             }
         }
-        
-        /// Generate main roads.
-        public void GenerateMainRoads()
-        {
-            GenerateRoads("Main", MainRoadParams);
-        }
-        
-        /// Generate major roads.
-        public void GenerateMajorRoads()
-        {
-            GenerateRoads("Major", MajorRoadParams);
-        }
-        
-        /// Generate minor roads.
-        public void GenerateMinorRoads()
-        {
-            GenerateRoads("Minor", MinorRoadParams);
-        }
 
-        private StreamlineGenerator GenerateRoads(string type, StreamlineGenerator.Parameters parameters,
-                                                  Polygon park = null)
+        public StreamlineGenerator GenerateRoads(string type,
+                                                 StreamlineGenerator.Parameters parameters,
+                                                 Polygon park = null)
         {
             var integrator = new RungeKutta4Integrator(this, parameters);
             var generator = new StreamlineGenerator(integrator, WorldOrigin, WorldDimensions, parameters);
@@ -281,7 +227,7 @@ namespace CityGen
                 Parks.Add(poly);
                 parkCentroids.Add(centroid);
 
-                GenerateRoads("Path", PathParams, poly);
+                //GenerateRoads("Path", PathParams, poly);
                 parkArea += poly.Area;
             }
         }
@@ -300,21 +246,60 @@ namespace CityGen
     {
         static void Main(string[] args)
         {
-            RNG.Reseed(3891231);
+            var fileContents = File.ReadAllText(args[0]);
+            var mapParams = JsonConvert.DeserializeObject<MapParams>(fileContents);
 
-            // Voronoi.Test();
-            var map = new Map(new Vector2(2000f, 2000f), new Vector2(0f, 0f), true);
-            map.InitializeRandom();
-            map.GenerateMainRoads();
-            map.GenerateMajorRoads();
+            RNG.Reseed(mapParams.seed);
+
+            var map = new Map(new Vector2(mapParams.size, mapParams.size),
+                              new Vector2(0f, 0f),
+                              mapParams.smooth);
+
+            Benchmark("InitializeRandom", () =>
+            {
+                map.InitializeRandom(mapParams.randomRadialFields);
+            });
+
+            foreach (var road in mapParams.roadParameters)
+            {
+                if (road.Type != "road")
+                {
+                    continue;
+                }
+
+                Benchmark(road.Name, () =>
+                {
+                    map.GenerateRoads(road.Name, road);
+                });
+            }
+
+            Benchmark("AddParks", () =>
+            {
+                map.AddParks(mapParams.parkAreaPercentage,
+                             mapParams.minDistanceBetweenParks);
+            });
+
+            Benchmark("FinalizeMap", () =>
+            {
+                map.FinalizeMap();
+            });
+
+            Benchmark("ExportPNG", () =>
+            {
+                PNGExporter.ExportPNG(map, "TEST_MAP.png", 2048);
+            });
             
-            map.AddParks(0.05f, 500f);
-            map.FinalizeMap();
-            // map.GenerateMinorRoads();
-            
-            PNGExporter.ExportPNG(map, "/Users/Jonas/Downloads/TEST_MAP.png", 2048);
-            PNGExporter.ExportGraph(map, "/Users/Jonas/Downloads/TEST_GRAPH.png", 2048);
-            PNGExporter.ExportTensorField(map, "/Users/Jonas/Downloads/TEST_TENSOR.png", 2048);
+            //PNGExporter.ExportGraph(map, "TEST_GRAPH.png", 2048);
+            //PNGExporter.ExportTensorField(map, "TEST_TENSOR.png", 2048);
+        }
+
+        public static void Benchmark(string name, Action func)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+            func();
+            sw.Stop();
+
+            Console.WriteLine("[{0}] {1}", name, sw.Elapsed);
         }
     }
 }

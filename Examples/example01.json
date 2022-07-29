@@ -1,0 +1,84 @@
+{
+    "seed": 4655564,
+    "size": 2500,
+    "smooth": true,
+    "randomRadialFields": 1,
+    "radialFields": [
+        {
+            "position_x": 0.3,
+            "position_y": 0.5,
+            "size": 0.05,
+            "decay": null
+        }
+    ],
+    "parkAreaPercentage": 0.05,
+    "minDistanceBetweenParks": 500,
+    "roadParameters": [
+        {
+            "Name": "Main",
+            "Type": "road",
+            "DSep": 400,
+            "DTest": 200,
+            "DStep": 1,
+            "DCircleJoin": 5,
+            "DLookahead": 500,
+            "RoadJoinAngle": 0.1,
+            "PathIntegrationLimit": 2688,
+            "MaxSeedTries": 300,
+            "EarlyCollisionProbability": 0,
+            "SimplificationTolerance": 0.5,
+            "CulDeSacProbability": 0.01,
+            "CuLDeSacRadiusMin": 15,
+            "CuLDeSacRadiusMax": 25
+        },
+        {
+            "Name": "Major",
+            "Type": "road",
+            "DSep": 100,
+            "DTest": 30,
+            "DStep": 1,
+            "DCircleJoin": 5,
+            "DLookahead": 200,
+            "RoadJoinAngle": 0.1,
+            "PathIntegrationLimit": 2688,
+            "MaxSeedTries": 300,
+            "EarlyCollisionProbability": 0,
+            "SimplificationTolerance": 0.5,
+            "CulDeSacProbability": 0.03,
+            "CuLDeSacRadiusMin": 7.5,
+            "CuLDeSacRadiusMax": 15
+        },
+        {
+            "Name": "Minor",
+            "Type": "road",
+            "DSep": 20,
+            "DTest": 15,
+            "DStep": 1,
+            "DCircleJoin": 5,
+            "DLookahead": 40,
+            "RoadJoinAngle": 0.1,
+            "PathIntegrationLimit": 2688,
+            "MaxSeedTries": 300,
+            "EarlyCollisionProbability": 0,
+            "SimplificationTolerance": 0.5,
+            "CulDeSacProbability": 0.05,
+            "CuLDeSacRadiusMin": 5,
+            "CuLDeSacRadiusMax": 10
+        },
+        {
+            "Name": "path",
+            "Type": "park_path",
+            "DSep": 20,
+            "DTest": 15,
+            "DStep": 1,
+            "DCircleJoin": 5,
+            "DLookahead": 40,
+            "RoadJoinAngle": 0.1,
+            "PathIntegrationLimit": 2688,
+            "MaxSeedTries": 300,
+            "EarlyCollisionProbability": 0,
+            "SimplificationTolerance": 0.5,
+            "CulDeSacProbability": 0
+        }
+    ]
+}

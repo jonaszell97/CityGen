@@ -1,53 +1,88 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.Serialization;
 
 namespace CityGen.Util
 {
     public class StreamlineGenerator
     {
-        public struct Parameters
+        [DataContract] public struct Parameters
         {
+            /// The name of this road type.
+            [DataMember] public string Name;
+
+            /// The type of this road.
+            [DataMember] public string Type;
+
             /// Streamline seed separating distance.
-            public float DSep;
+            [DataMember] public float DSep;
 
             /// Streamline integration separating distance.
-            public float DTest;
+            [DataMember] public float DTest;
 
             /// Streamline step size.
-            public float DStep;
+            [DataMember] public float DStep;
 
             /// How far to look to join circles (e.g. 2*dstep).
-            public float DCircleJoin;
+            [DataMember] public float DCircleJoin;
 
             /// How far to look ahead to join dangling streamlines.
-            public float DLookahead;
+            [DataMember] public float DLookahead;
 
             /// Road join angle in radians.
-            public float RoadJoinAngle;
+            [DataMember] public float RoadJoinAngle;
 
             /// Path integration iteration limit.
-            public int PathIntegrationLimit;
+            [DataMember] public int PathIntegrationLimit;
 
             /// Max seed tries.
-            public int MaxSeedTries;
+            [DataMember] public int MaxSeedTries;
 
             /// Chance of early collision from 0-1.
-            public float EarlyCollisionProbability;
+            [DataMember] public float EarlyCollisionProbability;
 
             /// Simplification tolerance.
-            public float SimplificationTolerance;
+            [DataMember] public float SimplificationTolerance;
 
             /// Probability that a dangling streamline will be converted to a cul-de-sac.
-            public float CulDeSacProbability;
+            [DataMember] public float CulDeSacProbability;
 
             /// Minimum radius for a cul-de-sac.
-            public float CuLDeSacRadiusMin;
-            
+            [DataMember] public float CuLDeSacRadiusMin;
+
             /// Maximum radius for a cul-de-sac.
-            public float CuLDeSacRadiusMax;
+            [DataMember] public float CuLDeSacRadiusMax;
+
+            public Parameters(string name, string type,
+                              float dSep, float dTest, float dStep,
+                              float dCircleJoin, float dLookahead,
+                              float roadJoinAngle = 0.1f,
+                              int pathIntegrationLimit = 2688,
+                              int maxSeedTries = 300,
+                              float earlyCollisionProbability = 0,
+                              float simplificationTolerance = 0.5f,
+                              float culDeSacProbability = 0,
+                              float cuLDeSacRadiusMin = 5,
+                              float cuLDeSacRadiusMax = 10)
+            {
+                Name = name;
+                Type = type;
+                DSep = dSep;
+                DTest = dTest;
+                DStep = dStep;
+                DCircleJoin = dCircleJoin;
+                DLookahead = dLookahead;
+                RoadJoinAngle = roadJoinAngle;
+                PathIntegrationLimit = pathIntegrationLimit;
+                MaxSeedTries = maxSeedTries;
+                EarlyCollisionProbability = earlyCollisionProbability;
+                SimplificationTolerance = simplificationTolerance;
+                CulDeSacProbability = culDeSacProbability;
+                CuLDeSacRadiusMin = cuLDeSacRadiusMin;
+                CuLDeSacRadiusMax = cuLDeSacRadiusMax;
+            }
         }
 
         /// Whether or not to create seed at endpoints of existing streamlines.
