@@ -1,75 +1,121 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
+using System.IO;
 using System.Linq;
+using SkiaSharp;
 
 namespace CityGen.Util
 {
-    static class DrawingExtensions
+    //static class DrawingExtensions
+    //{
+    //    internal static void FillCircle(this Graphics g, Brush brush, PointF center, float radius)
+    //    {
+    //        g.FillEllipse(brush, center.X - radius, center.Y - radius, 2f * radius, 2f * radius);
+    //    }
+    //}
+
+    static class SkiaExtensions
     {
-        internal static void FillCircle(this Graphics g, Brush brush, PointF center, float radius)
+        internal static void FillPolygon(this SKCanvas canvas, SKPoint[] points, SKPaint paint)
         {
-            g.FillEllipse(brush, center.X - radius, center.Y - radius, 2f * radius, 2f * radius);
+            var path = new SKPath();
+            path.MoveTo(points.First());
+
+            for (var i = 1; i < points.Length; ++i)
+            {
+                path.LineTo(points[i]);
+            }
+
+            path.Close();
+            canvas.DrawPath(path, paint);
         }
     }
 
     public static class PNGExporter
     {
+        static string GetFilePath(string filename)
+        {
+            var path = Path.Combine("/Users/jonaszell/CityGen/Exports",
+                                    DateTime.Now.ToString().Replace('/', '_'));
+            Directory.CreateDirectory(path);
+
+            return Path.Combine(path, filename);
+        }
+
         /// Export a map to PNG.
         public static void ExportPNG(Map map, string fileName, int resolution, Graph graph = null)
         {
-            using (var drawing = new Bitmap(resolution, resolution))
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
+
+            var canvas = surface.Canvas;
+            canvas.Clear(new SKColor(249, 245, 237));
+
+            // Draw parks
+            var parkPaint = new SKPaint
             {
-                using (var graphics = Graphics.FromImage(drawing))
+                Color = new SKColor(200, 250, 204),
+                IsAntialias = true,
+                Style = SKPaintStyle.Fill,
+            };
+
+            foreach (var park in map.Parks)
+            {
+                canvas.FillPolygon(park.Points
+                    .Select(p => GetGlobalCoordinate(map, p, resolution))
+                    .ToArray(),
+                  parkPaint);
+            }
+
+            // Draw roads
+            var pens = new Dictionary<string, Tuple<SKPaint, SKPaint>>();
+            foreach (var road in map.Roads)
+            {
+                if (!pens.ContainsKey(road.Type))
                 {
-                    graphics.CompositingQuality = CompositingQuality.HighQuality;
-                    graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    graphics.CompositingMode = CompositingMode.SourceCopy;
-                    graphics.SmoothingMode = SmoothingMode.HighQuality;
-
-                    graphics.FillRectangle(new SolidBrush(Color.FromArgb(255, 249, 245, 237)), 0, 0, resolution, resolution);
-                    
-                    // #C8FACC
-                    var parkBrush = new SolidBrush(Color.FromArgb(255, 200, 250, 204));
-                    foreach (var park in map.Parks)
-                    {
-                        graphics.FillPolygon(parkBrush,
-                            park.Points.Select(p => GetGlobalCoordinate(map, p, resolution)).ToArray());
-                    }
-
-                    var pens = new Dictionary<string, Tuple<Pen, Pen>>();
-                    foreach (var road in map.Roads)
-                    {
-                        if (!pens.ContainsKey(road.Type))
+                    pens.Add(road.Type, Tuple.Create(
+                        new SKPaint
                         {
-                            pens.Add(road.Type, Tuple.Create(
-                                new Pen(road.BorderDrawColor, road.DrawWidth * resolution + road.BorderDrawWidth * resolution),
-                                new Pen(road.DrawColor, road.DrawWidth * resolution)));
-                        }
-                        
-                        DrawRoad(map, resolution, graphics, road.Streamline, pens[road.Type].Item1);
-                    }
-
-                    for (var i = map.Roads.Count - 1; i >= 0; --i)
-                    {
-                        var road = map.Roads[i];
-                        DrawRoad(map, resolution, graphics, road.Streamline, pens[road.Type].Item2);
-                    }
-
-                    if (graph != null)
-                    {
-                        var graphPen = new Pen(Color.Red);
-                        foreach (var node in graph.GraphNodes)
+                            Color = road.BorderDrawColor,
+                            StrokeWidth = road.DrawWidth * resolution + road.BorderDrawWidth,
+                        },
+                        new SKPaint
                         {
-                            var pos = GetGlobalCoordinate(map, node.Key, resolution);
-                            graphics.DrawRectangle(graphPen, pos.X - 1f, pos.Y - 1f, 2f, 2f);
+                            Color = road.DrawColor,
+                            StrokeWidth = road.DrawWidth * resolution,
                         }
-                    }
-
-                    drawing.Save(fileName);
+                    ));
                 }
+
+                DrawRoad(map, resolution, canvas, road.Streamline, pens[road.Type].Item1);
+            }
+
+            for (var i = map.Roads.Count - 1; i >= 0; --i)
+            {
+                var road = map.Roads[i];
+                DrawRoad(map, resolution, canvas, road.Streamline, pens[road.Type].Item2);
+            }
+
+            // Draw graph
+            if (graph != null)
+            {
+                var graphPen = new SKPaint
+                {
+                    Color = SKColors.Red,
+                };
+
+                foreach (var node in graph.GraphNodes)
+                {
+                    var pos = GetGlobalCoordinate(map, node.Key, resolution);
+                    canvas.DrawRect(pos.X - 1, pos.Y - 1, 2, 2, graphPen);
+                }
+            }
+
+            using (var image = surface.Snapshot())
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
+            using (var stream = File.OpenWrite(GetFilePath(fileName)))
+            {
+                data.SaveTo(stream);
             }
         }
 
@@ -80,370 +126,410 @@ namespace CityGen.Util
         }
 
         /// Export the graph as a PNG.
-        public static void ExportGraph(Graph graph, Vector2 size, string fileName, int resolution, float scale = 1f)
+        public static void ExportGraph(Graph graph, Vector2 size, string fileName,
+                                       int resolution, float scale = 1f)
         {
-            var nodeBrush = new SolidBrush(Color.Red);
-            var linePen = new Pen(Color.Green, .002f * resolution) { LineJoin = LineJoin.Round };
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
+
+            var canvas = surface.Canvas;
+            canvas.Clear(new SKColor(249, 245, 237));
+
+            var nodePaint = new SKPaint
+            {
+                Color = SKColors.Red,
+            };
+            var linePen = new SKPaint
+            {
+                Color = SKColors.Green,
+                StrokeWidth = 0.002f * resolution,
+                StrokeCap = SKStrokeCap.Round,
+            };
             var nodeSize = .004f * resolution;
 
-            using (var drawing = new Bitmap(resolution, resolution))
+            foreach (var loop in graph.Loops)
             {
-                using (var graphics = Graphics.FromImage(drawing))
+                var brush = new SKPaint
                 {
-                    graphics.FillRectangle(
-                        new SolidBrush(Color.FromArgb(255, 249, 245, 237)), 0, 0, resolution, resolution);
+                    Color = RNG.RandomColor,
+                };
 
-                    foreach (var loop in graph.Loops)
-                    {
-                        var brush = new SolidBrush(RNG.RandomColor);
-                        graphics.FillPolygon(brush, 
-                            loop.Poly.Points.Select(p => GetGlobalCoordinate(size, p, resolution, scale)).ToArray());
-                    }
+                canvas.FillPolygon(
+                    loop.Poly.Points.Select(p => GetGlobalCoordinate(size, p, resolution, scale)).ToArray(),
+                    brush);
+            }
 
-                    foreach (var node in graph.GraphNodes)
-                    {
-                        foreach (var neighbor in node.Value.Neighbors)
-                        {
-                            DrawRoad(size, resolution, graphics, neighbor.Value, linePen, null, scale);
-                        }
-                    }
-
-                    var nodeFont = new Font("Arial", MathF.Max(18f - scale, 8f));
-                    foreach (var node in graph.GraphNodes)
-                    {
-                        var pos = GetGlobalCoordinate(size, node.Key, resolution, scale);
-                        graphics.DrawString(node.Value.ID.ToString(), nodeFont, nodeBrush, pos);
-                    }
-
-                    drawing.Save(fileName);
+            foreach (var node in graph.GraphNodes)
+            {
+                foreach (var neighbor in node.Value.Neighbors)
+                {
+                    DrawRoad(size, resolution, canvas, neighbor.Value, linePen, null, scale);
                 }
+            }
+
+            var nodeFont = new SKPaint
+            {
+                Color = SKColors.Black,
+                StrokeWidth = MathF.Max(18f - scale, 8f),
+            };
+
+            foreach (var node in graph.GraphNodes)
+            {
+                var pos = GetGlobalCoordinate(size, node.Key, resolution, scale);
+                canvas.DrawText(node.Value.ID.ToString(), pos, nodeFont);
+            }
+
+            using (var image = surface.Snapshot())
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
+            using (var stream = File.OpenWrite(GetFilePath(fileName)))
+            {
+                data.SaveTo(stream);
             }
         }
 
         /// Export the tensor grid PNG.
         public static void ExportTensorField(Map map, string fileName, int resolution)
         {
-            using (var drawing = new Bitmap(resolution, resolution))
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
+
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.Black);
+
+            var pen = new SKPaint { Color = SKColors.White };
+            var distanceBetweenGridPoints = 30f;
+            var gridLineLength = 30f;
+
+            for (var x = 0f; x < map.WorldDimensions.x; x += distanceBetweenGridPoints)
             {
-                using (var graphics = Graphics.FromImage(drawing))
+                for (var y = 0f; y < map.WorldDimensions.y; y += distanceBetweenGridPoints)
                 {
-                    graphics.CompositingQuality = CompositingQuality.HighQuality;
-                    graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    graphics.CompositingMode = CompositingMode.SourceCopy;
-                    graphics.SmoothingMode = SmoothingMode.HighQuality;
+                    var worldPt = new Vector2(x, y);
+                    var sample = map.SamplePoint(worldPt);
 
-                    graphics.FillRectangle(new SolidBrush(Color.Black), 0, 0, resolution, resolution);
+                    var start = worldPt - sample.Major * (gridLineLength * .5f);
+                    var end = worldPt + sample.Major * (gridLineLength * .5f);
 
-                    var pen = new Pen(Color.White);
-                    var distanceBetweenGridPoints = 30f;
-                    var gridLineLength = 30f;
+                    canvas.DrawLine(GetGlobalCoordinate(map, start, resolution),
+                        GetGlobalCoordinate(map, end, resolution), pen);
 
-                    for (var x = 0f; x < map.WorldDimensions.x; x += distanceBetweenGridPoints)
-                    {
-                        for (var y = 0f; y < map.WorldDimensions.y; y += distanceBetweenGridPoints)
-                        {
-                            var worldPt = new Vector2(x, y);
-                            var sample = map.SamplePoint(worldPt);
+                    start = worldPt - sample.Minor * (gridLineLength * .5f);
+                    end = worldPt + sample.Minor * (gridLineLength * .5f);
 
-                            var start = worldPt - sample.Major * (gridLineLength * .5f);
-                            var end = worldPt + sample.Major * (gridLineLength * .5f);
-
-                            graphics.DrawLine(pen, GetGlobalCoordinate(map, start, resolution),
-                                GetGlobalCoordinate(map, end, resolution));
-                            
-                            start = worldPt - sample.Minor * (gridLineLength * .5f);
-                            end = worldPt + sample.Minor * (gridLineLength * .5f);
-
-                            graphics.DrawLine(pen, GetGlobalCoordinate(map, start, resolution),
-                                GetGlobalCoordinate(map, end, resolution));
-                        }
-                    }
-
-                    drawing.Save(fileName);
+                    canvas.DrawLine(GetGlobalCoordinate(map, start, resolution),
+                        GetGlobalCoordinate(map, end, resolution), pen);
                 }
+            }
+
+            using (var image = surface.Snapshot())
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
+            using (var stream = File.OpenWrite(GetFilePath(fileName)))
+            {
+                data.SaveTo(stream);
             }
         }
 
         /// Map from voronoi diagrams to polygon colors.
-        private static Dictionary<Tuple<Voronoi, int>, Color> _voronoiColors;
+        private static Dictionary<Tuple<Voronoi, int>, SKColor> _voronoiColors;
 
         /// Draw a voronoi diagram.
         public static void DrawVoronoi(Voronoi voronoi, string fileName, int resolution, float scale = 1.0f,
-                                       List<Tuple<Vector2, Vector2, Color>> linesToDraw = null,
-                                       List<Tuple<Vector2, Color>> pointsToDraw = null,
+                                       List<Tuple<Vector2, Vector2, SKColor>> linesToDraw = null,
+                                       List<Tuple<Vector2, SKColor>> pointsToDraw = null,
                                        bool drawNames = false)
         {
-            if (_voronoiColors == null)
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
+
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.White);
+
+            var linePen = new SKPaint { Color = SKColors.Black, StrokeWidth = 1f };
+            var siteBrush = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Fill };
+            Polygon[] polygons = null;
+
+            int n;
+            if (voronoi.Polygons != null)
             {
-                _voronoiColors = new Dictionary<Tuple<Voronoi, int>, Color>();
-            }
-            
-            using (var drawing = new Bitmap(resolution, resolution))
-            {
-                using (var graphics = Graphics.FromImage(drawing))
+                n = voronoi.Polygons.Length - 1;
+
+                polygons = new Polygon[voronoi.Polygons.Length];
+                voronoi.Polygons.CopyTo(polygons, 0);
+                Array.Sort(polygons, (p1, p2) => p1.Area.CompareTo(p2.Area));
+
+                foreach (var poly in polygons)
                 {
-                    graphics.CompositingQuality = CompositingQuality.HighQuality;
-                    graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    graphics.CompositingMode = CompositingMode.SourceCopy;
-                    graphics.SmoothingMode = SmoothingMode.HighQuality;
-
-                    graphics.FillRectangle(new SolidBrush(Color.White), 0, 0, resolution, resolution);
-
-                    var linePen = new Pen(Color.Black, 1f);
-                    var siteBrush = new SolidBrush(Color.Black);
-                    Polygon[] polygons = null;
-
-                    int n;
-                    if (voronoi.Polygons != null)
+                    var key = Tuple.Create(voronoi, n);
+                    if (!_voronoiColors.TryGetValue(key, out var color))
                     {
-                        n = voronoi.Polygons.Length - 1;
-
-                        polygons = new Polygon[voronoi.Polygons.Length];
-                        voronoi.Polygons.CopyTo(polygons, 0);
-                        Array.Sort(polygons, (p1, p2) => p1.Area.CompareTo(p2.Area));
-
-                        foreach (var poly in polygons)
-                        {
-                            var key = Tuple.Create(voronoi, n);
-                            if (!_voronoiColors.TryGetValue(key, out var color))
-                            {
-                                color = RNG.RandomColor;
-                                _voronoiColors.Add(key, color);
-                            }
-
-                            var brush = new SolidBrush(color);
-                            graphics.FillPolygon(brush,
-                                poly.Points.Select(p => GetGlobalCoordinate(voronoi.Size, p, resolution, scale))
-                                    .ToArray());
-
-                            for (var i = 1; i <= poly.Points.Length; ++i)
-                            {
-                                var p0 = poly.Points[i - 1];
-                                var p1 = i == poly.Points.Length ? poly.Points[0] : poly.Points[i];
-
-                                graphics.DrawLine(linePen, GetGlobalCoordinate(voronoi.Size, p0, resolution, scale),
-                                    GetGlobalCoordinate(voronoi.Size, p1, resolution, scale));
-                            }
-
-                            --n;
-                        }
-                    }
-                    else
-                    {
-                        foreach (var edge in voronoi.Edges)
-                        {
-                            graphics.DrawLine(linePen, GetGlobalCoordinate(voronoi.Size, edge.Start, resolution, scale),
-                                GetGlobalCoordinate(voronoi.Size, edge.End, resolution, scale));
-                        }
+                        color = RNG.RandomColor;
+                        _voronoiColors.Add(key, color);
                     }
 
-                    n = 0;
-                    foreach (var pt in voronoi.Points)
+                    var brush = new SKPaint { Color = color, Style = SKPaintStyle.Fill };
+                    canvas.FillPolygon(
+                        poly.Points.Select(p => GetGlobalCoordinate(voronoi.Size, p, resolution, scale))
+                            .ToArray(), brush);
+
+                    for (var i = 1; i <= poly.Points.Length; ++i)
                     {
-                        graphics.FillCircle(siteBrush, GetGlobalCoordinate(voronoi.Size, pt, resolution, scale), 2f);
+                        var p0 = poly.Points[i - 1];
+                        var p1 = i == poly.Points.Length ? poly.Points[0] : poly.Points[i];
+
+                        canvas.DrawLine(GetGlobalCoordinate(voronoi.Size, p0, resolution, scale),
+                            GetGlobalCoordinate(voronoi.Size, p1, resolution, scale), linePen);
                     }
 
-                    if (drawNames && polygons != null)
-                    {
-                        var font = new Font("Arial", 14);
-                        var textBrush = new SolidBrush(Color.Black);
-
-                        foreach (var poly in polygons)
-                        {
-                            graphics.DrawString((n++).ToString(), font, textBrush, 
-                                GetGlobalCoordinate(voronoi.Size, poly.Centroid, resolution, scale));
-                        }
-                    }
-
-                    if (linesToDraw != null)
-                    {
-                        foreach (var line in linesToDraw)
-                        {
-                            graphics.DrawLine(new Pen(line.Item3), 
-                                GetGlobalCoordinate(voronoi.Size, line.Item1, resolution, scale),
-                                GetGlobalCoordinate(voronoi.Size, line.Item2, resolution, scale));
-                        }
-                    }
-                    
-                    if (pointsToDraw != null)
-                    {
-                        foreach (var pt in pointsToDraw)
-                        {
-                            graphics.FillCircle(new SolidBrush(pt.Item2), 
-                                GetGlobalCoordinate(voronoi.Size, pt.Item1, resolution, scale), 2f);
-                        }
-                    }
-
-                    drawing.Save(fileName);
+                    --n;
                 }
+            }
+            else
+            {
+                foreach (var edge in voronoi.Edges)
+                {
+                    canvas.DrawLine(GetGlobalCoordinate(voronoi.Size, edge.Start, resolution, scale),
+                        GetGlobalCoordinate(voronoi.Size, edge.End, resolution, scale), linePen);
+                }
+            }
+
+            n = 0;
+            foreach (var pt in voronoi.Points)
+            {
+                canvas.DrawCircle(GetGlobalCoordinate(voronoi.Size, pt, resolution, scale), 2f, siteBrush);
+            }
+
+            if (drawNames && polygons != null)
+            {
+                var nodeFont = new SKPaint
+                {
+                    Color = SKColors.Black,
+                    StrokeWidth = MathF.Max(18f - scale, 8f),
+                };
+
+                foreach (var poly in polygons)
+                {
+                    canvas.DrawText((n++).ToString(),
+                        GetGlobalCoordinate(voronoi.Size, poly.Centroid, resolution, scale),
+                        nodeFont);
+                }
+            }
+
+            if (linesToDraw != null)
+            {
+                foreach (var line in linesToDraw)
+                {
+                    canvas.DrawLine(
+                        GetGlobalCoordinate(voronoi.Size, line.Item1, resolution, scale),
+                        GetGlobalCoordinate(voronoi.Size, line.Item2, resolution, scale),
+                        new SKPaint { Color = line.Item3 });
+                }
+            }
+
+            if (pointsToDraw != null)
+            {
+                foreach (var pt in pointsToDraw)
+                {
+                    canvas.DrawCircle(GetGlobalCoordinate(voronoi.Size, pt.Item1, resolution, scale),
+                        2f, new SKPaint { Color = pt.Item2 });
+                }
+            }
+
+            using (var image = surface.Snapshot())
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
+            using (var stream = File.OpenWrite(GetFilePath(fileName)))
+            {
+                data.SaveTo(stream);
             }
         }
 
         /// Draw a voronoi diagram.
         public static void DrawVoronoiEdges(Voronoi voronoi, string directory, int resolution, float scale = 1.0f)
         {
-            using (var drawing = new Bitmap(resolution, resolution))
-            {
-                using (var graphics = Graphics.FromImage(drawing))
-                {
-                    graphics.CompositingQuality = CompositingQuality.HighQuality;
-                    graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    graphics.CompositingMode = CompositingMode.SourceCopy;
-                    graphics.SmoothingMode = SmoothingMode.HighQuality;
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
 
-                    graphics.FillRectangle(new SolidBrush(Color.White), 0, 0, resolution, resolution);
-                    
-                    var siteBrush = new SolidBrush(Color.Black);
-                    foreach (var pt in voronoi.Points)
-                    {
-                        graphics.FillCircle(siteBrush, GetGlobalCoordinate(voronoi.Size, pt, resolution, scale), 2f);
-                    }
+            var canvas = surface.Canvas;
+            canvas.Clear(new SKColor(249, 245, 237));
 
-                    var linePenRed = new Pen(Color.Red, 1f);
-                    var linePenBlack = new Pen(Color.Black, 1f);
-                    
-                    var i = 0;
-                    var prev = (Voronoi.Edge?)null;
+            //using (var drawing = new Bitmap(resolution, resolution))
+            //{
+            //    using (var graphics = Graphics.FromImage(drawing))
+            //    {
+            //        graphics.CompositingQuality = CompositingQuality.HighQuality;
+            //        graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            //        graphics.CompositingMode = CompositingMode.SourceCopy;
+            //        graphics.SmoothingMode = SmoothingMode.HighQuality;
 
-                    var edges = voronoi.Edges.ToArray();
-                    Array.Sort(edges, (edge, edge1) => edge.Start.CompareTo(edge1.Start));
+            //        graphics.FillRectangle(new SolidBrush(Color.White), 0, 0, resolution, resolution);
 
-                    foreach (var edge in edges)
-                    {
-                        var p0 = GetGlobalCoordinate(voronoi.Size, edge.Start, resolution, scale);
-                        var p1 = GetGlobalCoordinate(voronoi.Size, edge.End, resolution, scale);
-                        graphics.DrawLine(linePenRed, p0, p1);
+            //        var siteBrush = new SolidBrush(Color.Black);
+            //        foreach (var pt in voronoi.Points)
+            //        {
+            //            graphics.FillCircle(siteBrush, GetGlobalCoordinate(voronoi.Size, pt, resolution, scale), 2f);
+            //        }
 
-                        if (prev != null)
-                        {
-                            p0 = GetGlobalCoordinate(voronoi.Size, prev.Value.Start, resolution, scale);
-                            p1 = GetGlobalCoordinate(voronoi.Size, prev.Value.End, resolution, scale);
-                            graphics.DrawLine(linePenBlack, p0, p1);
-                        }
+            //        var linePenRed = new Pen(Color.Red, 1f);
+            //        var linePenBlack = new Pen(Color.Black, 1f);
 
-                        drawing.Save($"{directory}/edge{i++}.png");
-                        prev = edge;
-                    }
-                }
-            }
+            //        var i = 0;
+            //        var prev = (Voronoi.Edge?)null;
+
+            //        var edges = voronoi.Edges.ToArray();
+            //        Array.Sort(edges, (edge, edge1) => edge.Start.CompareTo(edge1.Start));
+
+            //        foreach (var edge in edges)
+            //        {
+            //            var p0 = GetGlobalCoordinate(voronoi.Size, edge.Start, resolution, scale);
+            //            var p1 = GetGlobalCoordinate(voronoi.Size, edge.End, resolution, scale);
+            //            graphics.DrawLine(linePenRed, p0, p1);
+
+            //            if (prev != null)
+            //            {
+            //                p0 = GetGlobalCoordinate(voronoi.Size, prev.Value.Start, resolution, scale);
+            //                p1 = GetGlobalCoordinate(voronoi.Size, prev.Value.End, resolution, scale);
+            //                graphics.DrawLine(linePenBlack, p0, p1);
+            //            }
+
+            //            drawing.Save($"{directory}/edge{i++}.png");
+            //            prev = edge;
+            //        }
+            //    }
+            //}
         }
         
         public static void DrawVoronoiPolys(Voronoi voronoi, string directory, int resolution, float scale = 1.0f)
         {
-            using (var drawing = new Bitmap(resolution, resolution))
-            {
-                using (var graphics = Graphics.FromImage(drawing))
-                {
-                    graphics.CompositingQuality = CompositingQuality.HighQuality;
-                    graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    graphics.CompositingMode = CompositingMode.SourceCopy;
-                    graphics.SmoothingMode = SmoothingMode.HighQuality;
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
 
-                    graphics.FillRectangle(new SolidBrush(Color.White), 0, 0, resolution, resolution);
+            var canvas = surface.Canvas;
+            canvas.Clear(new SKColor(249, 245, 237));
 
-                    var siteBrush = new SolidBrush(Color.Black);
-                    var i = 0;
-                    foreach (var poly in voronoi.Polygons)
-                    {
-                        var brush = new SolidBrush(RNG.RandomColor);
-                        graphics.FillPolygon(brush,
-                            poly.Points.Select(p => GetGlobalCoordinate(voronoi.Size, p, resolution, scale))
-                                .ToArray());
-                        
-                        foreach (var pt in voronoi.Points)
-                        {
-                            graphics.FillCircle(siteBrush, GetGlobalCoordinate(voronoi.Size, pt, resolution, scale), 2f);
-                        }
+            //using (var drawing = new Bitmap(resolution, resolution))
+            //{
+            //    using (var graphics = Graphics.FromImage(drawing))
+            //    {
+            //        graphics.CompositingQuality = CompositingQuality.HighQuality;
+            //        graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            //        graphics.CompositingMode = CompositingMode.SourceCopy;
+            //        graphics.SmoothingMode = SmoothingMode.HighQuality;
 
-                        drawing.Save($"{directory}/poly{i++}.png");
-                    }
-                }
-            }
+            //        graphics.FillRectangle(new SolidBrush(Color.White), 0, 0, resolution, resolution);
+
+            //        var siteBrush = new SolidBrush(Color.Black);
+            //        var i = 0;
+            //        foreach (var poly in voronoi.Polygons)
+            //        {
+            //            var brush = new SolidBrush(RNG.RandomColor);
+            //            graphics.FillPolygon(brush,
+            //                poly.Points.Select(p => GetGlobalCoordinate(voronoi.Size, p, resolution, scale))
+            //                    .ToArray());
+
+            //            foreach (var pt in voronoi.Points)
+            //            {
+            //                graphics.FillCircle(siteBrush, GetGlobalCoordinate(voronoi.Size, pt, resolution, scale), 2f);
+            //            }
+
+            //            drawing.Save($"{directory}/poly{i++}.png");
+            //        }
+            //    }
+            //}
         }
 
-        static bool IsInBounds(PointF p, int resolution)
+        static bool IsInBounds(SKPoint p, int resolution)
         {
             return p.X >= 0f && p.Y >= 0f && p.X < resolution && p.Y < resolution;
         }
 
-        static void DrawRoad(Map map, int resolution, Graphics g, IReadOnlyList<Vector2> road,
-                             Pen pen, string name = null)
+        static void DrawRoad(Map map, int resolution, SKCanvas canvas,
+                             IReadOnlyList<Vector2> road,
+                             SKPaint paint, string name = null)
         {
             var lines = road.Select(p => GetGlobalCoordinate(map, p, resolution)).ToArray();
-            g.DrawLines(pen, lines);
-
-            if (name == null)
-                return;
-
-            var idx = road.Count / 2;
-            var pt = road[idx];
-            var imgPt = GetGlobalCoordinate(map, pt, resolution);
-
-            if (!IsInBounds(imgPt, resolution))
+            
+            for (var i = 1; i < lines.Length; ++i)
             {
-                for (idx = 0; idx < road.Count; ++idx)
-                {
-                    imgPt = GetGlobalCoordinate(map, road[idx], resolution);
-                    if (IsInBounds(imgPt, resolution))
-                    {
-                        break;
-                    }
-                }
+                canvas.DrawLine(lines[i - 1], lines[i], paint);
             }
 
-            if (idx < road.Count - 1)
-            {
-                g.DrawLine(new Pen(Color.Red), imgPt, GetGlobalCoordinate(map, road[idx + 1], resolution));
-            }
+            //if (name == null)
+            //    return;
 
-            g.DrawString(name, new Font("Arial", 16), new SolidBrush(Color.Black), imgPt);
+            //var idx = road.Count / 2;
+            //var pt = road[idx];
+            //var imgPt = GetGlobalCoordinate(map, pt, resolution);
+
+            //if (!IsInBounds(imgPt, resolution))
+            //{
+            //    for (idx = 0; idx < road.Count; ++idx)
+            //    {
+            //        imgPt = GetGlobalCoordinate(map, road[idx], resolution);
+            //        if (IsInBounds(imgPt, resolution))
+            //        {
+            //            break;
+            //        }
+            //    }
+            //}
+
+            //if (idx < road.Count - 1)
+            //{
+            //    g.DrawLine(new Pen(Color.Red), imgPt, GetGlobalCoordinate(map, road[idx + 1], resolution));
+            //}
+
+            //g.DrawString(name, new Font("Arial", 16), new SolidBrush(Color.Black), imgPt);
         }
 
-        static void DrawRoad(Vector2 size, int resolution, Graphics g, IReadOnlyList<Vector2> road,
-                             Pen pen, string name = null, float scale = 1f)
+        static void DrawRoad(Vector2 size, int resolution, SKCanvas canvas,
+                             IReadOnlyList<Vector2> road,
+                             SKPaint paint, string name = null, float scale = 1f)
         {
             var lines = road.Select(p => GetGlobalCoordinate(size, p, resolution, scale)).ToArray();
-            g.DrawLines(pen, lines);
 
-            if (name == null)
-                return;
-
-            var idx = road.Count / 2;
-            var pt = road[idx];
-            var imgPt = GetGlobalCoordinate(size, pt, resolution, scale);
-
-            if (!IsInBounds(imgPt, resolution))
+            for (var i = 1; i < lines.Length; ++i)
             {
-                for (idx = 0; idx < road.Count; ++idx)
-                {
-                    imgPt = GetGlobalCoordinate(size, road[idx], resolution, scale);
-                    if (IsInBounds(imgPt, resolution))
-                    {
-                        break;
-                    }
-                }
+                canvas.DrawLine(lines[i - 1], lines[i], paint);
             }
 
-            if (idx < road.Count - 1)
-            {
-                g.DrawLine(new Pen(Color.Red), imgPt, GetGlobalCoordinate(size, road[idx + 1], resolution, scale));
-            }
+            //if (name == null)
+            //    return;
 
-            g.DrawString(name, new Font("Arial", 16), new SolidBrush(Color.Black), imgPt);
+            //var idx = road.Count / 2;
+            //var pt = road[idx];
+            //var imgPt = GetGlobalCoordinate(size, pt, resolution, scale);
+
+            //if (!IsInBounds(imgPt, resolution))
+            //{
+            //    for (idx = 0; idx < road.Count; ++idx)
+            //    {
+            //        imgPt = GetGlobalCoordinate(size, road[idx], resolution, scale);
+            //        if (IsInBounds(imgPt, resolution))
+            //        {
+            //            break;
+            //        }
+            //    }
+            //}
+
+            //if (idx < road.Count - 1)
+            //{
+            //    g.DrawLine(new Pen(Color.Red), imgPt, GetGlobalCoordinate(size, road[idx + 1], resolution, scale));
+            //}
+
+            //g.DrawString(name, new Font("Arial", 16), new SolidBrush(Color.Black), imgPt);
         }
 
-        static PointF GetGlobalCoordinate(Map map, Vector2 pos, int resolution)
+        internal static SKPoint GetGlobalCoordinate(Map map, Vector2 pos, int resolution)
         {
-            return new PointF(
+            return new SKPoint(
                 (pos.x / map.WorldDimensions.x) * resolution,
                 resolution - (pos.y / map.WorldDimensions.y) * resolution);
         }
-        
-        static PointF GetGlobalCoordinate(Vector2 size, Vector2 pos, int resolution, float scale = 1f)
+
+        internal static SKPoint GetGlobalCoordinate(Vector2 size, Vector2 pos,
+            int resolution, float scale = 1f)
         {
             var paddingX = (scale / 2f) * size.x;
             var paddingY = (scale / 2f) * size.y;
-            return new PointF(
+            return new SKPoint(
                 ((pos.x + paddingX) / (size.x + 2f * paddingX)) * resolution,
                 resolution - ((pos.y + paddingY) / (size.y + 2f * paddingY)) * resolution);
         }

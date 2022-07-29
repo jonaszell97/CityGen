@@ -1,10 +1,5 @@
 *.DS_Store
-
-.history/
-.idea/
-.vscode/
-.build/
-.local/
-
-CityGen/bin
-CityGen/obj
+.vs/
+Exports/
+CityGen/bin/
+CityGen/obj/

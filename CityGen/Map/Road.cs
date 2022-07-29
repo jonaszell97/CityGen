@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using System.Drawing;
+using SkiaSharp;
 using CityGen.Util;
 
 namespace CityGen
@@ -20,24 +20,24 @@ namespace CityGen
         }
 
         /// Get the color of this road for drawing.
-        public Color DrawColor
+        public SKColor DrawColor
         {
             get
             {
                 switch (Type)
                 {
                     case "Main":
-                        return Color.Yellow;
+                        return SKColors.Yellow;
                     case "Path":
-                        return Color.Bisque;
+                        return SKColors.Bisque;
                     default:
-                        return Color.White;
+                        return SKColors.White;
                 }
             }
         }
         
         /// Get the color of this road for drawing.
-        public Color BorderDrawColor => Color.Gray;
+        public SKColor BorderDrawColor => SKColors.Gray;
 
         /// Get the draw width as a percentage of the resolution.
         public float DrawWidth

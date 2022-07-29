@@ -1,4 +1,4 @@
-using System.Drawing;
+using SkiaSharp;
 
 namespace CityGen.Util
 {
@@ -60,6 +60,8 @@ namespace CityGen.Util
         }
 
         /// Return a random color.
-        public static Color RandomColor => Color.FromArgb(255, Next(0, 255), Next(0, 255), Next(0, 255));
+        public static SKColor RandomColor => new SKColor((byte)Next(0, 255),
+                                                         (byte)Next(0, 255),
+                                                         (byte)Next(0, 255));
     }
 }

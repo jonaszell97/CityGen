@@ -575,7 +575,7 @@ namespace CityGen.Util
             var v = new Voronoi(pts);
             v = v.Refine();
 
-            PNGExporter.DrawVoronoi(v, "/Users/Jonas/Downloads/VORONOI.png", 1024, 2f);
+            PNGExporter.DrawVoronoi(v, "VORONOI.png", 1024, 2f);
             // PNGExporter.DrawVoronoiPolys(v, "/Users/Jonas/Downloads/VTEST", 1024, 2f);
             // PNGExporter.DrawVoronoiEdges(v, "/Users/Jonas/Downloads/VTEST", 512, 3f);
         }
