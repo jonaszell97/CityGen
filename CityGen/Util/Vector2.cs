@@ -245,6 +245,24 @@ namespace CityGen.Util
         {
             return new Vector2(Clamp(x, min.x, max.x), Clamp(y, min.y, max.y));
         }
+
+        public static bool CheckIntersection(Vector2 A1, Vector2 A2, Vector2 B1, Vector2 B2)
+        {
+            float tmp = (B2.x - B1.x) * (A2.y - A1.y) - (B2.y - B1.y) * (A2.x - A1.x);
+            return !tmp.Equals(0f);
+        }
+
+        public float xAxisAngle => MathF.Atan2(y, x);
+
+        public static float DirectionalAngleRad(Vector2 v1, Vector2 v2)
+        {
+            // angle = atan2(vector2.y, vector2.x) - atan2(vector1.y, vector1.x);
+            var angle = MathF.Atan2(v2.y, v2.x) - MathF.Atan2(v1.y, v1.x);
+            if (angle < 0f)
+                angle += 2f * MathF.PI;
+
+            return angle;
+        }
     }
 
     public struct Vector2ApproximateEqualityComparer : IEqualityComparer<Vector2>

@@ -50,6 +50,149 @@ namespace CityGen.Util
         {
         }
 
+        /// Create a polygon from a set of edges.
+        public Polygon(IReadOnlyList<Tuple<Vector2, Vector2>> edges,
+                       float tolerance = .1f)
+        {
+            var usedEdges = new HashSet<int>();
+            var maxEdgeLength = 0f;
+            
+            // Start with the leftmost point (minimum y as a tie breaker)
+            var startingPoint = edges[0].Item1;
+            foreach (var edge in edges)
+            {
+                var cmp = edge.Item2.x.CompareTo(startingPoint.x);
+                if (cmp < 0)
+                {
+                    startingPoint = edge.Item2;
+                }
+                else if (cmp == 0 && edge.Item2.y < startingPoint.y)
+                {
+                    startingPoint = edge.Item2;
+                }
+
+                maxEdgeLength = MathF.Max(maxEdgeLength, (edge.Item2 - edge.Item1).SqrMagnitude);
+            }
+
+            maxEdgeLength = MathF.Sqrt(maxEdgeLength);
+
+            var points = new List<Vector2>();
+            var currentPoint = startingPoint;
+            Vector2 currentDirection = new Vector2(0, 1);
+
+            while (true)
+            {
+                var minEdgeStart = new Vector2();
+                var minEdgeEnd = new Vector2();
+                var minAngle = float.PositiveInfinity;
+                int? minEdgeIndex = null;
+
+                // If we don't find an existing edge, also keep track of alternative
+                // points to use to create a new one
+                var minNewEdgeEnd = new Vector2();
+                var minNewEdgeScore = float.PositiveInfinity;
+                var newEdgeFound = false;
+
+                // Find all edges that start at the current point
+                for (var i = 0; i < edges.Count; ++i)
+                {
+                    if (usedEdges.Contains(i))
+                    {
+                        continue;
+                    }
+
+                    var edge = edges[i];
+
+                    // Compute in case we need to create a new edge
+                    var newEdgeAngle1 = Vector2.DirectionalAngleRad(edge.Item1 - currentPoint,
+                                                                    currentDirection);
+                    var newEdgeDistance1 = (edge.Item1 - currentPoint).Magnitude;
+                    var newEdgeScore1 = PolyConstructionNewEdgeScore(newEdgeAngle1, newEdgeDistance1, maxEdgeLength);
+
+                    if (newEdgeScore1 < minNewEdgeScore)
+                    {
+                        newEdgeFound = true;
+                        minNewEdgeEnd = edge.Item1;
+                        minNewEdgeScore = newEdgeScore1;
+                    }
+
+                    var newEdgeAngle2 = Vector2.DirectionalAngleRad(edge.Item2 - currentPoint,
+                                                                    currentDirection);
+                    var newEdgeDistance2 = (edge.Item2 - currentPoint).Magnitude;
+                    var newEdgeScore2 = PolyConstructionNewEdgeScore(newEdgeAngle2, newEdgeDistance2, maxEdgeLength);
+
+                    if (newEdgeScore2 < minNewEdgeScore)
+                    {
+                        newEdgeFound = true;
+                        minNewEdgeEnd = edge.Item2;
+                        minNewEdgeScore = newEdgeScore2;
+                    }
+
+                    Vector2 edgeStart, edgeEnd;
+                    if (edge.Item1.ApproximatelyEquals(currentPoint, tolerance))
+                    {
+                        edgeStart = edge.Item1;
+                        edgeEnd = edge.Item2;
+                    }
+                    else if (edge.Item2.ApproximatelyEquals(currentPoint, tolerance))
+                    {
+                        edgeStart = edge.Item2;
+                        edgeEnd = edge.Item1;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+
+                    // Test existing edge
+                    var angle = Vector2.DirectionalAngleRad(edgeEnd - edgeStart,
+                                                            currentDirection);
+
+                    if (angle < minAngle)
+                    {
+                        minAngle = angle;
+                        minEdgeIndex = i;
+                        minEdgeStart = edgeStart;
+                        minEdgeEnd = edgeEnd;
+                    }
+                }
+
+                // No further edges found, stop
+                if (!minEdgeIndex.HasValue)
+                {
+                    if (!newEdgeFound)
+                    {
+                        break;
+                    }
+
+                    // Create a new edge
+                    minEdgeStart = currentPoint;
+                    minEdgeEnd = minNewEdgeEnd;
+                }
+                else
+                {
+                    usedEdges.Add(minEdgeIndex.Value);
+                }
+                
+                points.Add(minEdgeEnd);
+
+                currentPoint = minEdgeEnd;
+                currentDirection = minEdgeEnd - minEdgeStart;
+
+                if (usedEdges.Count == edges.Count || minEdgeEnd.ApproximatelyEquals(startingPoint, tolerance))
+                {
+                    break;
+                }
+            }
+
+            Points = points.ToArray();
+        }
+
+        private static float PolyConstructionNewEdgeScore(float angle, float distance, float maxEdgeLength)
+        {
+            return angle + (distance / maxEdgeLength) * MathF.PI * 2;
+        }
+
         /// Whether or not this polygon is valid.
         public bool Valid => Area > 0f;
 
@@ -174,6 +317,44 @@ namespace CityGen.Util
                 
                 Console.Error.WriteLine("could not generate random point in polygon");
                 return RNG.RandomElement(Points);
+            }
+        }
+
+        /// Enumerate the edges of the polygon.
+        public IEnumerable<Tuple<Vector2, Vector2>> GetEdges()
+        {
+            for (var i = 1; i <= Points.Length; ++i)
+            {
+                var start = Points[i - 1];
+                var end = Points[i == Points.Length ? 0 : i];
+
+                yield return Tuple.Create(start, end);
+            }
+        }
+
+        /// Check whether or not the polygon is self-intersecting in O(n^2).
+        public bool IsSelfIntersectingSlow
+        {
+            get
+            {
+                var edges = GetEdges().ToArray();
+                for (var i = 0; i < edges.Length; ++i)
+                {
+                    for (var j = 0; j < edges.Length; ++j)
+                    {
+                        if (i == j)
+                        {
+                            continue;
+                        }
+
+                        if (Vector2.CheckIntersection(edges[i].Item1, edges[i].Item2, edges[j].Item1, edges[j].Item2))
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
             }
         }
     }

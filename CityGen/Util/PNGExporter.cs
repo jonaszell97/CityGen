@@ -33,13 +33,19 @@ namespace CityGen.Util
 
     public static class PNGExporter
     {
+        static string OutputDirectory = null;
+
         static string GetFilePath(string filename)
         {
-            var path = Path.Combine("/Users/jonaszell/CityGen/Exports",
-                                    DateTime.Now.ToString().Replace('/', '_'));
-            Directory.CreateDirectory(path);
+            if (OutputDirectory == null)
+            {
+                OutputDirectory = Path.Combine(
+                    "/Users/jonaszell/CityGen/Exports",
+                    DateTime.Now.ToString().Replace('/', '_'));
+                Directory.CreateDirectory(OutputDirectory);
+            }
 
-            return Path.Combine(path, filename);
+            return Path.Combine(OutputDirectory, filename);
         }
 
         /// Export a map to PNG.
@@ -238,6 +244,11 @@ namespace CityGen.Util
                                        List<Tuple<Vector2, SKColor>> pointsToDraw = null,
                                        bool drawNames = false)
         {
+            if (_voronoiColors == null)
+            {
+                _voronoiColors = new Dictionary<Tuple<Voronoi, int>, SKColor>();
+            }
+
             var imageInfo = new SKImageInfo(width: resolution, height: resolution);
             var surface = SKSurface.Create(imageInfo);
 
@@ -515,6 +526,210 @@ namespace CityGen.Util
             //}
 
             //g.DrawString(name, new Font("Arial", 16), new SolidBrush(Color.Black), imgPt);
+        }
+
+        /// Export a city boundary to PNG.
+        public static void ExportCityShape(Vector2 size, Polygon shape, string fileName, int resolution)
+        {
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
+
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.White);
+
+            var cityBrush = new SKPaint
+            {
+                Color = new SKColor(249, 245, 237),
+                Style = SKPaintStyle.Fill,
+            };
+
+            var boundaryPen = new SKPaint
+            {
+                Color = SKColors.Black,
+                Style = SKPaintStyle.Stroke,
+            };
+
+            var poly = shape.Points.Select(p => GetGlobalCoordinate(size, p, resolution)).ToArray();
+            canvas.FillPolygon(poly, cityBrush);
+            canvas.FillPolygon(poly, boundaryPen);
+
+            using (var image = surface.Snapshot())
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
+            using (var stream = File.OpenWrite(GetFilePath(fileName)))
+            {
+                data.SaveTo(stream);
+            }
+        }
+
+        /// Export a city boundary to PNG.
+        public static void ExportCityShape(Vector2 size, Voronoi v, BoundaryShape shape, string fileName, int resolution)
+        {
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
+
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.White);
+
+            var cityBrush = new SKPaint
+            {
+                Color = new SKColor(249, 245, 237),
+                Style = SKPaintStyle.Fill,
+            };
+
+            var boundaryPen = new SKPaint
+            {
+                Color = SKColors.Black,
+                Style = SKPaintStyle.Stroke,
+            };
+
+            foreach (var cell in v.Polygons)
+            {
+                if (!shape.ContainsPoint(cell.Centroid))
+                {
+                    continue;
+                }
+
+                var poly = cell.Points.Select(p => GetGlobalCoordinate(size, p, resolution)).ToArray();
+                canvas.FillPolygon(poly, cityBrush);
+                canvas.DrawPoints(mode: SKPointMode.Lines, poly, boundaryPen);
+            }
+
+            using (var image = surface.Snapshot())
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
+            using (var stream = File.OpenWrite(GetFilePath(fileName)))
+            {
+                data.SaveTo(stream);
+            }
+        }
+
+        /// Export some points or something idk
+        public static void ExportPoints(Vector2 size, IReadOnlyList<Vector2> points, string fileName, int resolution)
+        {
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
+
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.White);
+
+            var ptBrush = new SKPaint
+            {
+                Color = SKColors.Black,
+                Style = SKPaintStyle.Fill,
+            };
+
+            foreach (var pt in points)
+            {
+                canvas.DrawCircle(GetGlobalCoordinate(size, pt, resolution), 1f, ptBrush);
+            }
+
+            using (var image = surface.Snapshot())
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
+            using (var stream = File.OpenWrite(GetFilePath(fileName)))
+            {
+                data.SaveTo(stream);
+            }
+        }
+
+        public static void ExportLines(Vector2 size, List<Tuple<Vector2, Vector2>> lines, string fileName, int resolution)
+        {
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
+
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.White);
+
+            var boundaryPen = new SKPaint
+            {
+                Color = SKColors.Black,
+                Style = SKPaintStyle.Stroke,
+            };
+
+            foreach (var line in lines)
+            {
+                canvas.DrawLine(GetGlobalCoordinate(size, line.Item1, resolution),
+                    GetGlobalCoordinate(size, line.Item2, resolution),
+                    boundaryPen);
+            }
+
+            using (var image = surface.Snapshot())
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
+            using (var stream = File.OpenWrite(GetFilePath(fileName)))
+            {
+                data.SaveTo(stream);
+            }
+        }
+
+        public static void DrawNoise(float[,] noise, string fileName)
+        {
+            var size = (int)MathF.Sqrt(noise.Length);
+
+            var imageInfo = new SKImageInfo(width: size, height: size);
+            var surface = SKSurface.Create(imageInfo);
+
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.White);
+
+            for (var x = 0; x < size; ++x)
+            {
+                for (var y = 0; y < size; ++y)
+                {
+                    var grayLevel = (byte)(noise[x, y] * 255);
+                    canvas.DrawPoint(new SKPoint(x, y), new SKColor(grayLevel, grayLevel, grayLevel));
+                }
+            }
+
+            using (var image = surface.Snapshot())
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
+            using (var stream = File.OpenWrite(GetFilePath(fileName)))
+            {
+                data.SaveTo(stream);
+            }
+        }
+
+        public static void ExportShape(Vector2 size, BoundaryShape shape, string fileName, int resolution = 1024, float scale = 1f)
+        {
+            var imageInfo = new SKImageInfo(width: resolution, height: resolution);
+            var surface = SKSurface.Create(imageInfo);
+
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.White);
+
+            DrawShape(canvas, resolution, scale, size, shape, new SKPaint
+            {
+                Color = SKColors.Olive,
+                Style = SKPaintStyle.Stroke,
+            });
+
+            using (var image = surface.Snapshot())
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
+            using (var stream = File.OpenWrite(GetFilePath(fileName)))
+            {
+                data.SaveTo(stream);
+            }
+        }
+
+        static void DrawShape(SKCanvas canvas, int resolution, float scale, Vector2 size, BoundaryShape shape, SKPaint brush)
+        {
+            if (shape is RadialBoundaryShape radial)
+            {
+                canvas.DrawCircle(GetGlobalCoordinate(size, radial.Center, resolution, scale), radial.Radius, brush);
+            }
+            else if (shape is PolygonBoundaryShape poly)
+            {
+                canvas.FillPolygon(poly.Poly.Points.Select(p => GetGlobalCoordinate(size, p, resolution, scale))
+                        .ToArray(), brush);
+            }
+            else if (shape is BoundaryShapeUnion union)
+            {
+                foreach (var s in union.Shapes)
+                {
+                    DrawShape(canvas, resolution, scale, size, s, new SKPaint
+                    {
+                        Color = RNG.RandomColor,
+                        Style = SKPaintStyle.Fill,
+                    });
+                }
+            }
         }
 
         internal static SKPoint GetGlobalCoordinate(Map map, Vector2 pos, int resolution)

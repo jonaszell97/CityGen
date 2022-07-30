@@ -251,6 +251,8 @@ namespace CityGen
 
             RNG.Reseed(mapParams.seed);
 
+            Voronoi.Test();
+            
             var map = new Map(new Vector2(mapParams.size, mapParams.size),
                               new Vector2(0f, 0f),
                               mapParams.smooth);

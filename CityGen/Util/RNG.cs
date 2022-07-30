@@ -10,8 +10,12 @@ namespace CityGen.Util
         /// Initialize the random number generator.
         public static void Reseed(int seed)
         {
+            CurrentSeed = seed;
             _random = new System.Random(seed);
         }
+
+        /// The current RNG seed.
+        public static int CurrentSeed = 0;
 
         /// Generate a random float between 0 and 1.
         public static float value => (float) _random.NextDouble();

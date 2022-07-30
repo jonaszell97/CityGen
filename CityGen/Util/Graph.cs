@@ -30,7 +30,11 @@ namespace CityGen.Util
             /// Add a neighbor to this node.
             public void AddNeighbor(Node node, Vector2[] path = null, bool ignoreDuplicate = false)
             {
-                Debug.Assert(node != this, "node cannot be its own neighbor!");
+                if (this == node)
+                {
+                    //Debug.Assert(node != this, "node cannot be its own neighbor!");
+                    return;
+                }
 
                 if (Neighbors.ContainsKey(node))
                 {
