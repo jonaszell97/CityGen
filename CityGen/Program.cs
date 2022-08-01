@@ -104,10 +104,11 @@ namespace CityGen
 
         public StreamlineGenerator GenerateRoads(string type,
                                                  StreamlineGenerator.Parameters parameters,
+                                                 Polygon cityShape,
                                                  Polygon park = null)
         {
             var integrator = new RungeKutta4Integrator(this, parameters);
-            var generator = new StreamlineGenerator(integrator, WorldOrigin, WorldDimensions, parameters);
+            var generator = new StreamlineGenerator(integrator, WorldOrigin, WorldDimensions, parameters, cityShape);
 
             foreach (var gen in Generators)
             {
@@ -233,11 +234,35 @@ namespace CityGen
         }
 
         /// Finalize the map.
-        public void FinalizeMap()
+        public void FinalizeMap(Polygon cityShape = null)
         {
             foreach (var gen in Generators)
             {
                 gen.Item1.JoinDanglingStreamlines();
+            }
+
+            if (cityShape == null)
+            {
+                return;
+            }
+
+            foreach (var road in Roads)
+            {
+                if (road.Type != "Main")
+                {
+                    continue;
+                }
+
+                var newStreamline = new List<Vector2>();
+                foreach (var pt in road.Streamline)
+                {
+                    if (cityShape.Contains(pt))
+                    {
+                        newStreamline.Add(pt);
+                    }
+                }
+
+                road.Streamline = newStreamline;
             }
         }
     }
@@ -251,7 +276,7 @@ namespace CityGen
 
             RNG.Reseed(mapParams.seed);
 
-            Voronoi.Test();
+            //Voronoi.Test();
             
             var map = new Map(new Vector2(mapParams.size, mapParams.size),
                               new Vector2(0f, 0f),
@@ -260,6 +285,12 @@ namespace CityGen
             Benchmark("InitializeRandom", () =>
             {
                 map.InitializeRandom(mapParams.randomRadialFields);
+            });
+
+            Polygon cityShape = null;
+            Benchmark("GenerateCityShape", () =>
+            {
+                cityShape = CityShape.GenerateRandom(mapParams.size, mapParams.size);
             });
 
             foreach (var road in mapParams.roadParameters)
@@ -271,7 +302,7 @@ namespace CityGen
 
                 Benchmark(road.Name, () =>
                 {
-                    map.GenerateRoads(road.Name, road);
+                    map.GenerateRoads(road.Name, road, cityShape);
                 });
             }
 
@@ -288,7 +319,7 @@ namespace CityGen
 
             Benchmark("ExportPNG", () =>
             {
-                PNGExporter.ExportPNG(map, "TEST_MAP.png", 2048);
+                PNGExporter.ExportPNG(map, cityShape, "TEST_MAP.png", 2048);
             });
             
             //PNGExporter.ExportGraph(map, "TEST_GRAPH.png", 2048);

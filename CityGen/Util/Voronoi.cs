@@ -579,6 +579,21 @@ namespace CityGen.Util
             Polygons = graph.Loops.Select(loop => loop.Poly).Where(poly => Points.Any(poly.Contains)).ToArray();
         }
 
+        /// Whether this polygon is at one of the edges of the voronoi diagram.
+        public bool IsBoundaryPolygon(Polygon p)
+        {
+            var tolerance = 0.01f;
+            foreach (var pt in p.Points)
+            {
+                if (MathF.Abs(MathF.Abs(pt.x) - Size.x) < tolerance || MathF.Abs(MathF.Abs(pt.y) - Size.y) < tolerance)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// Generate a number of random points with a minimum distance to each other.
         public static List<Vector2> GeneratePoints(Vector2 min, Vector2 max, int n, float minDist)
         {
@@ -613,14 +628,14 @@ namespace CityGen.Util
 
         public static void Test()
         {
-            var size = new Vector2(2000f, 2000f);
+            var size = new Vector2(2500f, 2500f);
 
             Voronoi v;
             while (true)
             {
                 var pts = GeneratePoints(new Vector2(-size.x * .5f, -size.y * .5f),
                     new Vector2(size.x * .5f, size.y * .5f),
-                    500, 0f);
+                    1000, 0f);
 
                 // This is very good programming, don't question it
                 try

@@ -10,7 +10,7 @@ namespace CityGen
         public readonly string Type;
 
         /// The streamline that represents this road.
-        public readonly List<Vector2> Streamline;
+        public List<Vector2> Streamline;
 
         /// Constructor.
         public Road(string type, List<Vector2> streamline)

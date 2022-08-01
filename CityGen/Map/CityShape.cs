@@ -117,6 +117,76 @@ namespace CityGen
             internal Polygon Poly;
         }
 
+        /// Generate a number of random points with a minimum distance to each other.
+        public static List<Vector2> GeneratePoints(Vector2 min, Vector2 max, int n, float minDist)
+        {
+            var pts = new List<Vector2>();
+            var minSqrDist = minDist * minDist;
+
+            for (var i = 0; i < n; ++i)
+            {
+                var newPt = new Vector2(RNG.Next(min.x, max.x), RNG.Next(min.y, max.y));
+                var valid = true;
+
+                foreach (var pt in pts)
+                {
+                    if ((pt - newPt).SqrMagnitude <= minSqrDist)
+                    {
+                        valid = false;
+                        break;
+                    }
+                }
+
+                if (!valid)
+                {
+                    ++n;
+                    continue;
+                }
+
+                pts.Add(newPt);
+            }
+
+            return pts;
+        }
+
+        /// Generate a random city shape.
+        public static Polygon GenerateRandom(float width, float height)
+        {
+            var size = new Vector2(width, height);
+
+            Voronoi v;
+            while (true)
+            {
+                var pts = GeneratePoints(new Vector2(-size.x * .5f, -size.y * .5f),
+                    new Vector2(size.x * .5f, size.y * .5f),
+                    1000, 0f);
+
+                // This is very good programming, don't question it
+                try
+                {
+                    v = new Voronoi(pts);
+                    v = v.Refine();
+
+                    break;
+                }
+                catch
+                {
+                    RNG.Reseed(RNG.CurrentSeed + 1);
+                }
+            }
+
+            PNGExporter.DrawVoronoi(v, "VORONOI.png", 1024, 2f);
+
+            var shape = BoundaryShapeUnion.CreateRandom(new Vector2(size.x * 0.75f, size.y * 0.75f));
+            PNGExporter.ExportShape(size, shape, "SHAPE.png", 1024, 2f);
+
+            var boundary = GenerateIsland(v, shape);
+            PNGExporter.ExportCityShape(size, boundary, "CITY_SHAPE_UNREFINED.png", 1024);
+
+            return new Polygon(RefineCityBoundary(boundary),
+                               offset: new Vector2(size.x * 0.5f, size.y * 0.5f));
+        }
+
         /// Generate a city shape from a voronoi diagram and a boundary shape.
         public static Polygon GenerateIsland(Voronoi voronoi, BoundaryShape boundaryShape)
         {
@@ -131,7 +201,7 @@ namespace CityGen
 
             foreach (var poly in voronoi.Polygons)
             {
-                if (boundaryShape.ContainsPoint(poly.Centroid))
+                if (!voronoi.IsBoundaryPolygon(poly) && boundaryShape.ContainsPoint(poly.Centroid))
                 {
                     cells.Add(new Cell
                     {
@@ -195,7 +265,7 @@ namespace CityGen
 
             return new Polygon(coastlineEdges.ToList());
         }
-        
+
         /// Refine a city polygon by making sure there are no straight edges longer than a specified length.
         public static Polygon RefineCityBoundary(Polygon poly, int stdDev = 3)
         {

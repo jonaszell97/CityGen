@@ -50,6 +50,11 @@ namespace CityGen.Util
         {
         }
 
+        /// Create a polygon from another polygon and an offset.
+        public Polygon(Polygon clone, Vector2 offset) : this(clone.Points.Select((p) => p + offset))
+        {
+        }
+
         /// Create a polygon from a set of edges.
         public Polygon(IReadOnlyList<Tuple<Vector2, Vector2>> edges,
                        float tolerance = .1f)

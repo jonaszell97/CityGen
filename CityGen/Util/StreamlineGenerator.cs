@@ -143,14 +143,18 @@ namespace CityGen.Util
         /// All generated minor streamlines.
         public List<List<Vector2>> MinorStreamlines;
 
+        public Polygon boundingPoly;
+
         /// Constructor.
         public StreamlineGenerator(FieldIntegrator integrator, Vector2 gridOrigin,
-                                   Vector2 gridWorldDimensions, Parameters streamlineParams)
+                                   Vector2 gridWorldDimensions, Parameters streamlineParams,
+                                   Polygon boundingPoly)
         {
             this.Integrator = integrator;
             this.GridOrigin = gridOrigin;
             this.GridWorldDimensions = gridWorldDimensions;
             this.StreamlineParams = streamlineParams;
+            this.boundingPoly = boundingPoly;
             
             AllStreamlines = new List<List<Vector2>>();
             SimplifiedStreamlines = new List<List<Vector2>>();
@@ -242,7 +246,7 @@ namespace CityGen.Util
                         }
                         else
                         {
-                            addCulDeSacStart = true;
+                            //addCulDeSacStart = true;
                         }
                     }
 
@@ -276,7 +280,7 @@ namespace CityGen.Util
                         }
                         else
                         {
-                            addCulDeSacEnd = true;
+                            //addCulDeSacEnd = true;
                         }
                     }
 
@@ -657,7 +661,7 @@ namespace CityGen.Util
                 PreviousDirection = d,
                 PreviousPoint = seed + d,
                 Valid = PointInBounds(seed + d),
-                BoundingPoly = boundingPoly,
+                BoundingPoly = boundingPoly != null ? boundingPoly : this.boundingPoly,
             };
 
             var dNeg = d * -1f;
@@ -669,7 +673,7 @@ namespace CityGen.Util
                 PreviousDirection = dNeg,
                 PreviousPoint = seed + dNeg,
                 Valid = PointInBounds(seed + dNeg),
-                BoundingPoly = boundingPoly,
+                BoundingPoly = boundingPoly != null ? boundingPoly : this.boundingPoly,
             };
 
             while (count < StreamlineParams.PathIntegrationLimit && (fwdParams.Valid || bwdParams.Valid))

@@ -27,7 +27,7 @@
             "MaxSeedTries": 300,
             "EarlyCollisionProbability": 0,
             "SimplificationTolerance": 0.5,
-            "CulDeSacProbability": 0.01,
+            "CulDeSacProbability": 0,
             "CuLDeSacRadiusMin": 15,
             "CuLDeSacRadiusMax": 25
         },

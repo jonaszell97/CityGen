@@ -49,7 +49,7 @@ namespace CityGen.Util
         }
 
         /// Export a map to PNG.
-        public static void ExportPNG(Map map, string fileName, int resolution, Graph graph = null)
+        public static void ExportPNG(Map map, Polygon cityShape, string fileName, int resolution, Graph graph = null)
         {
             var imageInfo = new SKImageInfo(width: resolution, height: resolution);
             var surface = SKSurface.Create(imageInfo);
@@ -116,6 +116,13 @@ namespace CityGen.Util
                     canvas.DrawRect(pos.X - 1, pos.Y - 1, 2, 2, graphPen);
                 }
             }
+
+            // Draw boundary
+            canvas.FillPolygon(cityShape.Points.Select((p) => GetGlobalCoordinate(map, p, resolution)).ToArray(), new SKPaint
+            {
+                Color = SKColors.Black,
+                Style = SKPaintStyle.Stroke,
+            });
 
             using (var image = surface.Snapshot())
             using (var data = image.Encode(SKEncodedImageFormat.Png, 80))
