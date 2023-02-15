@@ -275,8 +275,6 @@ namespace CityGen
             var mapParams = JsonConvert.DeserializeObject<MapParams>(fileContents);
 
             RNG.Reseed(mapParams.seed);
-
-            //Voronoi.Test();
             
             var map = new Map(new Vector2(mapParams.size, mapParams.size),
                               new Vector2(0f, 0f),
@@ -321,9 +319,6 @@ namespace CityGen
             {
                 PNGExporter.ExportPNG(map, cityShape, "TEST_MAP.png", 2048);
             });
-            
-            //PNGExporter.ExportGraph(map, "TEST_GRAPH.png", 2048);
-            //PNGExporter.ExportTensorField(map, "TEST_TENSOR.png", 2048);
         }
 
         public static void Benchmark(string name, Action func)
